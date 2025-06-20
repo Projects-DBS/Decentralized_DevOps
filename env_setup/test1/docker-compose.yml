@@ -1,0 +1,59 @@
+version: '3.9'
+
+volumes:
+  dev_data:
+  qa_data:
+  prod_data:
+
+networks:
+  ci_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+services:
+  dev_m1:
+    build: .
+    container_name: dev_m1
+    hostname: dev_m1
+    ports:
+      - "2222:22"
+      - "14001:4001"
+      - "15001:5001"
+      - "18080:8080"
+    volumes:
+      - dev_data:/data
+    networks:
+      ci_net:
+        ipv4_address: 172.28.0.11
+
+  qa_m2:
+    build: .
+    container_name: qa_m2
+    hostname: qa_m2
+    ports:
+      - "2223:22"
+      - "24001:4001"
+      - "25001:5001"
+      - "28080:8080"
+    volumes:
+      - qa_data:/data
+    networks:
+      ci_net:
+        ipv4_address: 172.28.0.12
+
+  prod_m3:
+    build: .
+    container_name: prod_m3
+    hostname: prod_m3
+    ports:
+      - "2224:22"
+      - "34001:4001"
+      - "35001:5001"
+      - "38080:8080"
+    volumes:
+      - prod_data:/data
+    networks:
+      ci_net:
+        ipv4_address: 172.28.0.13
