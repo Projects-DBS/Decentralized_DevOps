@@ -43,6 +43,21 @@ RUN wget https://dist.ipfs.tech/ipfs-cluster-ctl/v1.0.8/ipfs-cluster-ctl_v1.0.8_
     mv ipfs-cluster-ctl/ipfs-cluster-ctl /usr/local/bin/ && \
     rm -rf ipfs-cluster-ctl*
 
+# Install immudb server
+RUN wget https://github.com/codenotary/immudb/releases/download/v1.9.5/immudb-v1.9.5-linux-amd64 && \
+    mv immudb-v1.9.5-linux-amd64 /usr/local/bin/immudb && \
+    chmod +x /usr/local/bin/immudb
+
+# Install immuclient
+RUN wget https://github.com/codenotary/immudb/releases/download/v1.5.0/immuclient-v1.5.0-linux-amd64 && \
+    mv immuclient-v1.5.0-linux-amd64 /usr/local/bin/immuclient && \
+    chmod +x /usr/local/bin/immuclient
+
+# Install immuadmin
+RUN wget https://github.com/vchain-us/immudb/releases/download/v1.3.0/immuadmin-v1.3.0-linux-amd64 && \
+    mv immuadmin-v1.3.0-linux-amd64 /usr/local/bin/immuadmin && \
+    chmod +x /usr/local/bin/immuadmin
+
 # Volume paths
 RUN mkdir -p /data/ipfs /data/ipfs-cluster
 
