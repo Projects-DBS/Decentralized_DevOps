@@ -82,6 +82,11 @@ fi
 # Start SSH
 /usr/sbin/sshd
 
+# Start immudb server in background if not running
+if ! pgrep immudb > /dev/null; then
+    /usr/local/bin/immudb -d &
+fi
+
 # Start IPFS daemon (background)
 su - $IPFS_USER -c "ipfs daemon &"
 
