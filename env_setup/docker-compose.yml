@@ -1,62 +1,71 @@
-version: '3.9'
+version: '3.8'
 
-volumes:
-  dev_data:
-  qa_data:
-  prod_data:
+services:
+  node1:
+    build: .
+    container_name: node1
+    hostname: node1
+    networks:
+      ipfsnet:
+        ipv4_address: 172.18.0.11
+    ports:
+      - "2221:22"
+      - "4001:4001"
+      - "5001:5001"
+      - "8081:8080"
+      - "9091:9096"
+      - "9191:9094"
+    volumes:
+      - ./swarm.key:/swarm.key:ro
+      - ./id_ed25519.pub:/id_ed25519.pub:ro
+      - node1_home:/home/guest
+
+  node2:
+    build: .
+    container_name: node2
+    hostname: node2
+    networks:
+      ipfsnet:
+        ipv4_address: 172.18.0.12
+    ports:
+      - "2222:22"
+      - "4002:4001"
+      - "5002:5001"
+      - "8082:8080"
+      - "9092:9096"
+      - "9192:9094"
+    volumes:
+      - ./swarm.key:/swarm.key:ro
+      - ./id_ed25519.pub:/id_ed25519.pub:ro
+      - node2_home:/home/guest
+
+  node3:
+    build: .
+    container_name: node3
+    hostname: node3
+    networks:
+      ipfsnet:
+        ipv4_address: 172.18.0.13
+    ports:
+      - "2223:22"
+      - "4003:4001"
+      - "5003:5001"
+      - "8083:8080"
+      - "9093:9096"
+      - "9193:9094"
+    volumes:
+      - ./swarm.key:/swarm.key:ro
+      - ./id_ed25519.pub:/id_ed25519.pub:ro
+      - node3_home:/home/guest
 
 networks:
-  ci_net:
+  ipfsnet:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.28.0.0/16
+        - subnet: 172.18.0.0/16
 
-services:
-  dev_m1:
-    build: .
-    container_name: dev_m1
-    hostname: dev_m1
-    ports:
-      - "2222:22"
-      - "14001:4001"
-      - "15001:5001"
-      - "18080:8080"
-      - "19094:9094"
-    volumes:
-      - dev_data:/data
-    networks:
-      ci_net:
-        ipv4_address: 172.28.0.11
-
-  qa_m2:
-    build: .
-    container_name: qa_m2
-    hostname: qa_m2
-    ports:
-      - "2223:22"
-      - "24001:4002"
-      - "25001:5002"
-      - "28080:8081"
-      - "29095:9095"
-    volumes:
-      - qa_data:/data
-    networks:
-      ci_net:
-        ipv4_address: 172.28.0.12
-
-  prod_m3:
-    build: .
-    container_name: prod_m3
-    hostname: prod_m3
-    ports:
-      - "2224:22"
-      - "34001:4003"
-      - "35001:5003"
-      - "38080:8082"
-      - "39096:9096"
-    volumes:
-      - prod_data:/data
-    networks:
-      ci_net:
-        ipv4_address: 172.28.0.13
+volumes:
+  node1_home:
+  node2_home:
+  node3_home:
