@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pull from IPFS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0;}
+    .container {
+      max-width: 500px;
+      margin: 60px auto;
+      background: #fff;
+      padding: 30px 40px 40px 40px;
+      border-radius: 12px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    h2 { margin-bottom: 30px; color: #333; font-weight: 600;}
+    select, button {
+      margin: 15px 0;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      width: 80%;
+      box-sizing: border-box;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    button {
+      background: #3477f5;
+      color: #fff;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover { background: #2657b5;}
+    .flash { margin-top: 20px; color: green; font-weight: 500; word-break: break-all;}
+    @media (max-width: 600px) {
+      .container { margin: 30px 20px; padding: 20px 25px 30px 25px;}
+      select, button { font-size: 15px; padding: 8px 12px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Download Project from IPFS</h2>
+    <div id="main-content"></div>
+    <pre id="out" class="flash"></pre>
+  </div>
+  <script>
+    // On load, fetch projects and build dropdowns
+    window.onload = function() {
+      fetch('/get_projects', {method: 'POST'})
+        .then(r => r.json())
+        .then(data => {
+          let projects = data.projects || [];
+          let main = document.getElementById('main-content');
+          if (!projects.length) {
+            main.innerHTML = '<div class="flash">No project pushed yet.</div>';
+            return;
+          }
+          // Build unique lists
+          let pnames = [...new Set(projects.map(p => p.project_name))];
+          main.innerHTML =
+            `<form id="pullForm">
+              <label>Project:</label>
+              <select id="project" name="project" required>
+                <option value="">Select Project</option>
+                ${pnames.map(n => `<option value="${n}">${n}</option>`).join('')}
+              </select>
+              <label>Tag:</label>
+              <select id="tag" name="tag" required>
+                <option value="">Select Tag</option>
+              </select>
+              <label>Version:</label>
+              <select id="version" name="version" required>
+                <option value="">Select Version</option>
+              </select>
+              <button type="submit">Download Project ZIP</button>
+            </form>`;
+          let proj = document.getElementById('project');
+          let tag = document.getElementById('tag');
+          let ver = document.getElementById('version');
+          // Populate tags on project change
+          proj.onchange = function() {
+            let tags = projects.filter(p => p.project_name === proj.value)
+                               .map(p => p.tag);
+            tags = [...new Set(tags)];
+            tag.innerHTML = '<option value="">Select Tag</option>' +
+                            tags.map(t => `<option value="${t}">${t}</option>`).join('');
+            ver.innerHTML = '<option value="">Select Version</option>';
+          };
+          // Populate versions on tag change
+          tag.onchange = function() {
+            let versions = projects.filter(
+              p => p.project_name === proj.value && p.tag === tag.value
+            ).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+            ver.innerHTML = '<option value="">Select Version</option>' +
+              versions.map(p =>
+                `<option value="${p.cid}|${p.version}">v${p.version} [${p.timestamp}]</option>`
+              ).join('');
+          };
+          // On submit, download ZIP
+          document.getElementById('pullForm').onsubmit = function(e) {
+            e.preventDefault();
+            let projectName = proj.value;
+            let val = ver.value.split('|');
+            let cid = val[0];
+            let out = document.getElementById('out');
+            out.textContent = 'Preparing download...';
+            fetch('/download_project', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({cid: cid, project_name: projectName})
+            }).then(r => {
+              if(!r.ok) throw new Error("File not ready");
+              return r.blob();
+            }).then(blob => {
+              let a = document.createElement('a');
+              a.href = window.URL.createObjectURL(blob);
+              a.download = projectName + '.zip';
+              document.body.appendChild(a); a.click();
+              a.remove();
+              out.textContent = 'Download started!';
+            }).catch(err => {
+              out.textContent = 'Download error: ' + err;
+            });
+          };
+        });
+    };
+  </script>
+</body>
+</html>

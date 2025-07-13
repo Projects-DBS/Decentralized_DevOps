@@ -1,0 +1,6 @@
+flask
+cryptography
+requests
+ipfshttpclient
+pycryptodome
+gunicorn

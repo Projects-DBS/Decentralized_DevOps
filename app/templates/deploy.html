@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Management Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-6">Server Management Dashboard</h1>
+
+        <!-- Active Servers Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Active Servers</h2>
+            <ul id="serverList" class="list-disc pl-6"></ul>
+        </div>
+
+        <!-- Artifact Selection Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Select Artifact</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label for="projectName" class="block text-sm font-medium text-gray-700">Project Name</label>
+                    <select id="projectName" class="mt-1 block w-full p-2 border rounded-md"></select>
+                </div>
+                <div>
+                    <label for="tag" class="block text-sm font-medium text-gray-700">Tag</label>
+                    <select id="tag" class="mt-1 block w-full p-2 border rounded-md"></select>
+                </div>
+                <div>
+                    <label for="version" class="block text-sm font-medium text-gray-700">Version</label>
+                    <select id="version" class="mt-1 block w-full p-2 border rounded-md"></select>
+                </div>
+            </div>
+            <div id="selectedCid" class="text-sm text-gray-600 mb-4"></div>
+        </div>
+
+        <!-- Password Inputs Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Credentials</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="artifactPassword" class="block text-sm font-medium text-gray-700">Artifact Password</label>
+                    <input type="password" id="artifactPassword" class="mt-1 block w-full p-2 border rounded-md" placeholder="Enter artifact password">
+                </div>
+                <div>
+                    <label for="serverPassword" class="block text-sm font-medium text-gray-700">Server Password</label>
+                    <input type="password" id="serverPassword" class="mt-1 block w-full p-2 border rounded-md" placeholder="Enter server password">
+                </div>
+            </div>
+        </div>
+
+        <!-- Port Availability Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Port Availability</h2>
+            <button id="checkPortButton" class="mb-4 bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700">Check Port Availability</button>
+            <button id="decommissionButton" class="mb-4 bg-red-600 text-white p-2 rounded-md hover:bg-red-700 ml-2">Decommission Service</button>
+            <ul id="portAvailability" class="list-disc pl-6"></ul>
+        </div>
+
+        <!-- Deploy Button -->
+        <button id="deployButton" class="w-full bg-green-600 text-white p-2 rounded-md hover:bg-green-700">Deploy</button>
+    </div>
+
+    <script>
+        let selectedCid = null;
+        let serverIps = [];
+        let availableIps = [];
+
+        // Fetch active servers
+        async function fetchServers() {
+            try {
+                const response = await fetch('/list-active-server');
+                if (response.redirected || response.status === 302) {
+                    alert('Session invalid. Please log in.');
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                if (data.error) {
+                    console.error('Error fetching servers:', data.error);
+                    alert('Failed to fetch servers: ' + data.error);
+                    return;
+                }
+                serverIps = data.servers.map(server => server.id);
+                const serverList = document.getElementById('serverList');
+                serverList.innerHTML = data.servers.map(server => `<li>${server.name}</li>`).join('');
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error fetching servers: ' + error.message);
+            }
+        }
+
+        // Fetch artifact build info and populate dropdowns
+        async function fetchBuildInfo() {
+            try {
+                const response = await fetch('/artifact_build_info');
+                if (response.redirected || response.status === 302) {
+                    alert('Session invalid. Please log in.');
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                const builds = data.project_builds;
+
+                // Get unique project names, tags, and versions
+                const projectNames = [...new Set(builds.map(build => build.project_name))];
+                const tags = [...new Set(builds.map(build => build.tag))];
+                const versions = [...new Set(builds.map(build => build.version))];
+
+                // Populate dropdowns
+                const projectNameSelect = document.getElementById('projectName');
+                const tagSelect = document.getElementById('tag');
+                const versionSelect = document.getElementById('version');
+
+                projectNameSelect.innerHTML = '<option value="">Select Project</option>' + 
+                    projectNames.map(name => `<option value="${name}">${name}</option>`).join('');
+                tagSelect.innerHTML = '<option value="">Select Tag</option>' + 
+                    tags.map(tag => `<option value="${tag}">${tag}</option>`).join('');
+                versionSelect.innerHTML = '<option value="">Select Version</option>' + 
+                    versions.map(version => `<option value="${version}">${version}</option>`).join('');
+
+                // Update CID when all dropdowns are selected
+                function updateSelectedCid() {
+                    const project = projectNameSelect.value;
+                    const tag = tagSelect.value;
+                    const version = versionSelect.value;
+                    if (project && tag && version) {
+                        const selectedBuild = builds.find(build => 
+                            build.project_name === project && 
+                            build.tag === tag && 
+                            build.version === version
+                        );
+                        selectedCid = selectedBuild ? selectedBuild.build_cid : null;
+                        document.getElementById('selectedCid').textContent = 
+                            selectedCid ? `Selected CID: ${selectedCid}` : 'No matching build found';
+                    } else {
+                        selectedCid = null;
+                        document.getElementById('selectedCid').textContent = '';
+                    }
+                }
+
+                projectNameSelect.addEventListener('change', updateSelectedCid);
+                tagSelect.addEventListener('change', updateSelectedCid);
+                versionSelect.addEventListener('change', updateSelectedCid);
+            } catch (error) {
+                console.error('Error fetching build info:', error);
+                alert('Error fetching build info: ' + error.message);
+            }
+        }
+
+        // Check port availability
+        async function checkPortAvailability() {
+            const tag = document.getElementById('tag').value;
+            if (!tag) {
+                alert('Please select a tag.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/check-port-availability', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tag, ips: serverIps })
+                });
+                if (response.redirected || response.status === 302) {
+                    alert('Session invalid. Please log in.');
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                availableIps = Object.keys(data).filter(ip => data[ip] === 'Available');
+                const portList = document.getElementById('portAvailability');
+                portList.innerHTML = Object.entries(data).map(([ip, status]) => 
+                    `<li class="${status === 'Available' ? 'text-green-600' : 'text-red-600'}">${ip}: ${status}</li>`
+                ).join('');
+                if (availableIps.length === 0) {
+                    alert('No servers available for deployment.');
+                }
+            } catch (error) {
+                console.error('Error checking ports:', error);
+                alert('Error checking port availability: ' + error.message);
+            }
+        }
+
+        // Decommission service
+        async function decommissionService() {
+            const tag = document.getElementById('tag').value;
+            const serverPassword = document.getElementById('serverPassword').value;
+
+            if (!tag) {
+                alert('Please select a tag.');
+                return;
+            }
+            if (!serverPassword) {
+                alert('Please enter the server password.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/check-port-availability', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tag, ips: serverIps })
+                });
+                if (response.redirected || response.status === 302) {
+                    alert('Session invalid. Please log in.');
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                const unavailableIps = Object.keys(data).filter(ip => data[ip] !== 'Available');
+
+                if (unavailableIps.length === 0) {
+                    alert('No servers to decommission.');
+                    return;
+                }
+
+                const decommissionResponse = await fetch('/decommission', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        server_list: unavailableIps,
+                        deployment_server_password: serverPassword,
+                        tag: tag
+                    })
+                });
+                if (decommissionResponse.redirected || decommissionResponse.status === 302) {
+                    alert('Session invalid. Please log in.');
+                    window.location.href = '/login';
+                    return;
+                }
+                const decommissionData = await decommissionResponse.json();
+                if (decommissionData.status === 'success') {
+                    alert(decommissionData.message || 'Decommission successful!');
+                    // Refresh port availability list
+                    await checkPortAvailability();
+                } else {
+                    alert(decommissionData.message || 'Decommission failed.');
+                }
+            } catch (error) {
+                console.error('Error decommissioning:', error);
+                alert('Decommission failed: ' + error.message);
+            }
+        }
+
+        // Deploy to servers
+        async function deploy() {
+            const artifactPassword = document.getElementById('artifactPassword').value;
+            const serverPassword = document.getElementById('serverPassword').value;
+            const tag = document.getElementById('tag').value;
+
+            if (!selectedCid) {
+                alert('Please select a project, tag, and version.');
+                return;
+            }
+            if (!artifactPassword) {
+                alert('Please enter the artifact password.');
+                return;
+            }
+            if (!serverPassword) {
+                alert('Please enter the server password.');
+                return;
+            }
+            if (!tag) {
+                alert('Please select a tag.');
+                return;
+            }
+            if (availableIps.length === 0) {
+                alert('No available servers for deployment. Please check port availability first.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/deploy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        server_list: availableIps,
+                        build_cid: selectedCid,
+                        artifact_password: artifactPassword,
+                        deployment_server_password: serverPassword,
+                        tag: tag
+                    })
+                });
+                if (response.redirected || response.status === 302) {
+                    alert('Session invalid. Please log in.');
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert(data.message || 'Deployment successful!');
+                } else {
+                    alert(data.message || 'Deployment failed.');
+                }
+            } catch (error) {
+                console.error('Error deploying:', error);
+                alert('Deployment failed: ' + error.message);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('checkPortButton').addEventListener('click', checkPortAvailability);
+        document.getElementById('decommissionButton').addEventListener('click', decommissionService);
+        document.getElementById('deployButton').addEventListener('click', deploy);
+
+        // Initialize
+        fetchServers();
+        fetchBuildInfo();
+    </script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>IPFS ZIP Upload</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
+      margin: 0; padding: 0;
+    }
+    .container {
+      max-width: 500px;
+      margin: 60px auto;
+      background: #fff;
+      padding: 30px 40px 40px 40px;
+      border-radius: 12px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    h2 {
+      margin-bottom: 30px;
+      color: #333;
+      font-weight: 600;
+    }
+    form input[type="file"] {
+      display: block;
+      margin: 20px auto;
+    }
+    form button {
+      background: #3477f5;
+      color: #fff;
+      border: none;
+      padding: 12px 30px;
+      font-size: 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    form button:hover {
+      background: #2657b5;
+    }
+    .flash {
+      margin-top: 20px;
+      color: green;
+      font-weight: 500;
+      word-break: break-all;
+    }
+    @media (max-width: 600px) {
+      .container {
+        margin: 30px 20px;
+        padding: 20px 25px 30px 25px;
+      }
+      form button {
+        font-size: 16px;
+        padding: 10px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Upload a .zip to IPFS Cluster</h2>
+    <form id="f" method="post" action="/pushto_ipfs" enctype="multipart/form-data">
+      <input type="file" name="zipfile" accept=".zip" required>
+      <button type="submit">Upload</button>
+    </form>
+    <pre id="out" class="flash"></pre>
+  </div>
+
+  <script>
+  document.getElementById('f').onsubmit = async function(e) {
+    e.preventDefault();
+    let out = document.getElementById('out');
+    out.textContent = 'Uploading…';
+    try {
+      let resp = await fetch('/pushto_ipfs', { method:'POST', body:new FormData(this) });
+      let data = await resp.json();
+      out.textContent = data.success
+        ? 'CID: ' + data.cid
+        : 'Error: ' + data.error;
+    } 
+    catch (err) {
+      out.textContent = "Error: " + err;
+    }
+  };
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CI Trigger</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; }
+    .container { max-width: 400px; margin: 50px auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 12px #ccc; }
+    label { display: block; margin-top: 15px; }
+    select, input, button { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #bbb; }
+    button { background: #3477f5; color: #fff; border: none; font-size: 16px; cursor: pointer; }
+    .error { color: #b00; }
+    .flash { color: green; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>CI Trigger</h2>
+    <form id="ciForm">
+      <label for="project">Project</label>
+      <select id="project" required>
+        <option value="">Select Project</option>
+      </select>
+      <label for="tag">Tag</label>
+      <select id="tag" required>
+        <option value="">Select Tag</option>
+      </select>
+      <label for="version">Version</label>
+      <select id="version" required>
+        <option value="">Select Version</option>
+      </select>
+
+      <!-- Password section -->
+      <label for="zip_password">Zip Password</label>
+      <input type="password" id="zip_password" required>
+      <label for="zip_password2">Confirm Password</label>
+      <input type="password" id="zip_password2" required>
+
+      <button type="submit">Trigger CI</button>
+    </form>
+    <div id="msg"></div>
+  </div>
+  <script>
+    let allProjects = [];
+    function showError(msg) {
+      document.getElementById('msg').textContent = msg;
+      document.getElementById('msg').className = 'error';
+    }
+    function showFlash(msg) {
+      document.getElementById('msg').textContent = msg;
+      document.getElementById('msg').className = 'flash';
+    }
+
+    function loadAllProjects() {
+      fetch('/project_info', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          allProjects = Array.isArray(data) ? data : (data.projects || []);
+          fillProjectsDropdown();
+        });
+    }
+
+    function fillProjectsDropdown() {
+      const projectSelect = document.getElementById('project');
+      projectSelect.innerHTML = '<option value="">Select Project</option>';
+      [...new Set(allProjects.map(p => p.project_name))].forEach(name => {
+        projectSelect.innerHTML += `<option value="${name}">${name}</option>`;
+      });
+      document.getElementById('tag').innerHTML = '<option value="">Select Tag</option>';
+      document.getElementById('version').innerHTML = '<option value="">Select Version</option>';
+    }
+    function fillTagsDropdown(projectName) {
+      const tagSelect = document.getElementById('tag');
+      tagSelect.innerHTML = '<option value="">Select Tag</option>';
+      [...new Set(allProjects.filter(p => p.project_name === projectName).map(p => p.tag))]
+        .forEach(tag => { tagSelect.innerHTML += `<option value="${tag}">${tag}</option>`; });
+      document.getElementById('version').innerHTML = '<option value="">Select Version</option>';
+    }
+    function fillVersionsDropdown(projectName, tag) {
+      const verSelect = document.getElementById('version');
+      verSelect.innerHTML = '<option value="">Select Version</option>';
+      [...new Set(allProjects.filter(p => p.project_name === projectName && p.tag === tag).map(p => p.version))]
+        .forEach(v => { verSelect.innerHTML += `<option value="${v}">${v}</option>`; });
+    }
+    function getSelectedProjectEntry(projectName, tag, version) {
+      return allProjects.find(
+        p => p.project_name === projectName && p.tag === tag && String(p.version) === String(version)
+      );
+    }
+
+    window.onload = loadAllProjects;
+    document.getElementById('project').onchange = function() {
+      let pname = this.value;
+      if (pname) fillTagsDropdown(pname);
+      else {
+        document.getElementById('tag').innerHTML = '<option value="">Select Tag</option>';
+        document.getElementById('version').innerHTML = '<option value="">Select Version</option>';
+      }
+    };
+    document.getElementById('tag').onchange = function() {
+      const pname = document.getElementById('project').value;
+      const tag = this.value;
+      if (pname && tag) fillVersionsDropdown(pname, tag);
+      else document.getElementById('version').innerHTML = '<option value="">Select Version</option>';
+    };
+
+    document.getElementById('ciForm').onsubmit = function(e) {
+      e.preventDefault();
+      const project = document.getElementById('project').value;
+      const tag = document.getElementById('tag').value;
+      const version = document.getElementById('version').value;
+      const zipPassword = document.getElementById('zip_password').value;
+      const zipPassword2 = document.getElementById('zip_password2').value;
+      if (!project || !tag || !version) return showError('All fields required!');
+      if (!zipPassword || !zipPassword2) return showError('Enter password in both fields.');
+      if (zipPassword !== zipPassword2) return showError('Passwords do not match.');
+
+      const selected = getSelectedProjectEntry(project, tag, version);
+      if (!selected) return showError('Invalid selection.');
+
+      showFlash('Triggering CI...');
+      fetch('/trigger-build-ci', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          cid: selected.cid,
+          tag: selected.tag,
+          zip_password: zipPassword,
+          project_name: project
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) showFlash('CI triggered successfully!');
+        else showError(data.message || 'Trigger failed.');
+      })
+      .catch(() => showError('Network or server error.'));
+    };
+  </script>
+</body>
+</html>
+
