@@ -1,0 +1,11 @@
+{
+    "username" : "admin",
+    "first_name" : "CICD",
+    "last_name" : "Administrator",
+    "role": "admin",
+    "organization": "Dublin Bussiness School",
+    "email" : "edwinshabu1998@gmail.com",
+    "contact" : "0892205440",
+    "operations":["push","pull","ci","cd","manage_permission","logs"],
+    "pages" : ["admin_dashboard","ipfs-repo-operation","pushto_ipfs", "pullfrom_ipfs","user_registration", "cicdpage","list_all_servers", "ci", "build", "deploy", "decommission"]
+}
