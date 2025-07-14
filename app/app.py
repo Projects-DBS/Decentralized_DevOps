@@ -1110,7 +1110,7 @@ def pushto_ipfs():
         status = update_project_record(new_cid, None, ipns_key_projects, project_name, access_info)
 
         if status == True:
-            return jsonify(success=True, cid=new_cid)
+            return jsonify(success=True, cid="Successfully pushed to IPFS Cluster.")
         else:
             return jsonify(success=False, error="Failed to push the project to the repo."), 500
 
