@@ -49,6 +49,76 @@ def ipfs_connect(base_url):
 
 
 
+def remove_user_info(ipns_access_control_key, username):
+    try:
+        resolved = subprocess.run(
+            f"ipfs name resolve --nocache -r {ipns_access_control_key}",
+            shell=True, capture_output=True, text=True
+        )
+        if resolved.returncode != 0:
+            return False, "Failed to resolve IPNS"
+
+        cid = resolved.stdout.strip()
+        data = subprocess.run(
+            f"ipfs cat {cid}", shell=True, capture_output=True, text=True
+        )
+        if data.returncode != 0:
+            return False, "Failed to fetch data from IPFS"
+
+        info = json.loads(data.stdout)
+        ac = info.get("access_control", [])
+        found = False
+        updated = []
+        for entry in ac:
+            if username in entry:
+                found = True
+                entry.pop(username)
+            if entry:
+                updated.append(entry)
+        if not found:
+            return False, "Username not found"
+
+        info["access_control"] = updated
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
+            json.dump(info, tmp)
+            tmp_path = tmp.name
+
+        add = subprocess.run(
+            f"ipfs add -Q {tmp_path}", shell=True, capture_output=True, text=True
+        )
+        os.unlink(tmp_path)
+        if add.returncode != 0:
+            return False, "Failed to add updated data to IPFS"
+
+        new_cid = add.stdout.strip()
+        publish = subprocess.run(
+            f"ipfs name publish {new_cid} --key={ipns_access_control_key}",
+            shell=True, capture_output=True, text=True
+        )
+        if publish.returncode != 0:
+            return False, "Failed to publish to IPNS"
+
+        return True, f"User removed."
+    except Exception as e:
+        return False, str(e)
+
+def list_all_users(ipns_key_access_control):
+    resolve = subprocess.run(f"ipfs name resolve --nocache -r {ipns_key_access_control}", shell=True, capture_output=True, text=True)
+    if resolve.returncode != 0:
+        return []
+    cid = resolve.stdout.strip()
+    cat = subprocess.run(
+        f"ipfs cat {cid}", shell=True, capture_output=True, text=True
+    )
+    if cat.returncode != 0:
+        return []
+    try:
+        info = json.loads(cat.stdout)
+    except:
+        return []
+    return [k for entry in info.get("access_control", []) if isinstance(entry, dict) for k in entry]
+
 
 
 def retrieve_access_control(ipns_cid, username):
