@@ -50,7 +50,7 @@ COPY admin_auth.json /tmp/admin_auth.json
 
 COPY app /home/${APP_USERNAME}/app/
 
-COPY ipns_keys /tmp/ipns_keys/
+COPY ipns_keys /home/${APP_USERNAME}/ipns_keys/
 
 ENV PYTHONUNBUFFERED=1
 

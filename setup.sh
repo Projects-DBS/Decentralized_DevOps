@@ -36,11 +36,13 @@ fi
 # sudo -u "${APP_USERNAME}" ipfs config Addresses.API /ip4/0.0.0.0/tcp/5001 || true
 sudo -u "${APP_USERNAME}" ipfs config Experimental.IPNSPubsub --bool true || true
 
-for keyfile in /tmp/ipns_keys/*.key; do
-    keyname=$(basename "$keyfile" .key)
-    sudo -u $APP_USERNAME ipfs key import "$keyname" "$keyfile"
-done
-rm -rf /tmp/ipns_keys
+if [ -d "/home/${APP_USERNAME}/ipns_keys" ] && compgen -G "/home/${APP_USERNAME}/ipns_keys/*.key" > /dev/null; then
+    for keyfile in /home/${APP_USERNAME}/ipns_keys/*.key; do
+        keyname=$(basename "$keyfile" .key)
+        sudo -u $APP_USERNAME ipfs key import "$keyname" "$keyfile"
+    done
+    rm -rf /home/${APP_USERNAME}/ipns_keys
+fi
 
 
 # Start SSH
