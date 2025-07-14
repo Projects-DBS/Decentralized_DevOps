@@ -137,7 +137,7 @@ def login():
                 return redirect(url_for("login"))
 
             except Exception as e:
-                flash(f"Login failed: {str(e)}")
+                flash(f"Login failed: Invalid Credentials")
                 return redirect(url_for("login"))
 
         else:
