@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0;}
+        .container {
+            max-width: 460px; margin: 30px auto; background: #fff; padding: 28px 18px 22px 18px;
+            border-radius: 16px; box-shadow: 0 6px 32px 0 rgba(52,119,245,0.09), 0 1.5px 7px #e0e8f8;
+        }
+        h2 { text-align: center; color: #2c4374; font-weight: 600;}
+        .nav-btns { display: flex; gap: 8px; margin-bottom: 28px; }
+        .nav-btns button {
+            flex: 1;
+            padding: 13px 0;
+            background: #e8eefb;
+            color: #234;
+            border: none;
+            border-radius: 9px 9px 0 0;
+            font-size: 18px;
+            font-weight: 600;
+            transition: background .22s, color .18s;
+            cursor: pointer;
+        }
+        .nav-btns button.active {
+            background: #3477f5;
+            color: #fff;
+            box-shadow: 0 2px 7px 0 #dde8fd;
+        }
+        .section { display: none; }
+        .section.show { display: block; }
+        label { display: block; margin: 17px 0 8px 0; color: #355; font-weight: 600; font-size: 1.07em;}
+        input, select {
+            width: 100%; padding: 11px; border: 1.2px solid #c9d3ec; border-radius: 5px; font-size: 16px; box-sizing: border-box;
+            background: #fff;
+        }
+        select { font-size: 15.5px;}
+        .checkbox-group {
+            margin: 10px 0 16px 0;
+            padding: 10px 8px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            font-size: 15.7px;
+        }
+        .checkbox-item:last-child {
+            margin-bottom: 0;
+        }
+        .checkbox-item input[type="checkbox"] {
+            margin-right: 10px;
+            accent-color: #3477f5;
+            width: 18px; height: 18px;
+        }
+        .action-btn {
+            width: 100%;
+            padding: 13px 0;
+            background: #3477f5;
+            color: #fff;
+            border: none;
+            border-radius: 7px;
+            font-size: 17.3px;
+            font-weight: 700;
+            margin-top: 23px;
+            letter-spacing: 0.09em;
+            transition: background .19s;
+            cursor: pointer;
+            box-shadow: 0 3px 12px 0 #dce7fa;
+        }
+        .action-btn:disabled {
+            background: #aeb9cf;
+            color: #e3e8f2;
+            cursor: not-allowed;
+        }
+        #reg-message, #remove-message {
+            margin: 13px 0 0 0;
+            text-align: center;
+            font-size: 15.5px;
+            font-weight: 600;
+        }
+        #reg-message.success, #remove-message.success { color: #2e7d32; }
+        #reg-message.error, #remove-message.error { color: #d32f2f; }
+        @media (max-width: 600px) {
+            .container { max-width: 99vw; padding: 10px 2vw 15px 2vw;}
+            .nav-btns button { font-size: 15.2px; }
+            input, select { font-size: 15px; }
+            label { font-size: 15.5px;}
+            .checkbox-item { font-size: 14.8px;}
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="nav-btns">
+        <button id="regNav" class="active" type="button">Registration</button>
+        <button id="removeNav" type="button">Remove User</button>
+    </div>
+
+    <!-- Registration Section -->
+    <div class="section show" id="registrationSection">
+        <h2>Registration</h2>
+        <form id="regForm" autocomplete="off">
+            <label>Username</label>
+            <input type="text" name="username" required>
+            <label>First Name</label>
+            <input type="text" name="first_name" required>
+            <label>Last Name</label>
+            <input type="text" name="last_name" required>
+            <label>Role</label>
+            <input type="text" name="role" required>
+            <label>Organization</label>
+            <input type="text" name="organization" required>
+            <label>Email</label>
+            <input type="email" name="email" required>
+            <label>Contact</label>
+            <input type="tel" name="contact" required>
+            <label>Password</label>
+            <input type="password" name="password" required minlength="6">
+            <label>Confirm Password</label>
+            <input type="password" name="confirm_password" required minlength="6">
+            <label>Operations</label>
+            <div class="checkbox-group" id="operations"></div>
+            <label>Page Access</label>
+            <div class="checkbox-group" id="pages"></div>
+            <button type="submit" class="action-btn">Register</button>
+            <div id="reg-message"></div>
+        </form>
+    </div>
+
+    <!-- Remove User Section -->
+    <div class="section" id="removeUserSection">
+        <h2>Remove User</h2>
+        <label>Select User</label>
+        <select id="userSelect"><option value="">-- Select a user --</option></select>
+        <button id="removeBtn" class="action-btn" disabled>Remove User</button>
+        <div id="remove-message"></div>
+    </div>
+</div>
+
+<script>
+function showSection(section) {
+    document.getElementById('registrationSection').classList.remove('show');
+    document.getElementById('removeUserSection').classList.remove('show');
+    document.getElementById('regNav').classList.remove('active');
+    document.getElementById('removeNav').classList.remove('active');
+    if(section === 'registration') {
+        document.getElementById('registrationSection').classList.add('show');
+        document.getElementById('regNav').classList.add('active');
+    } else {
+        document.getElementById('removeUserSection').classList.add('show');
+        document.getElementById('removeNav').classList.add('active');
+        document.getElementById('remove-message').textContent = '';
+        document.getElementById('remove-message').className = '';
+        loadUserList();
+    }
+}
+document.getElementById('regNav').onclick = function(){ showSection('registration'); };
+document.getElementById('removeNav').onclick = function(){ showSection('remove'); };
+
+// ---- MAKE CHECKBOXES VERTICAL, LABEL ALIGNED ----
+window.onload = function() {
+    fetch('/registration_parameter')
+    .then(r=>r.json()).then(d=>{
+        let ops = d.operations || [];
+        let box = '';
+        for(let i=0;i<ops.length;i++){
+            box += '<div class="checkbox-item"><input type="checkbox" name="operations" value="'+ops[i]+'"><span>'+ops[i]+'</span></div>';
+        }
+        document.getElementById('operations').innerHTML = box;
+    });
+    fetch('/registration_parameter_pages')
+    .then(r=>r.json()).then(d=>{
+        let pages = d.page_access || [];
+        let box = '';
+        for(let i=0;i<pages.length;i++){
+            box += '<div class="checkbox-item"><input type="checkbox" name="page_access" value="'+pages[i]+'"><span>'+pages[i]+'</span></div>';
+        }
+        document.getElementById('pages').innerHTML = box;
+    });
+    document.getElementById('regForm').onsubmit = function(e){
+        e.preventDefault();
+        let f = e.target;
+        let pw = f.password.value, cpw = f.confirm_password.value;
+        let msgDiv = document.getElementById('reg-message');
+        msgDiv.textContent = '';
+        msgDiv.className = '';
+        if(!pw || !cpw) { msgDiv.textContent = "Password fields cannot be empty."; msgDiv.className = "error"; return; }
+        if(pw.length < 6) { msgDiv.textContent = "Password should be at least 6 characters."; msgDiv.className = "error"; return; }
+        if(pw !== cpw) { msgDiv.textContent = "Passwords do not match."; msgDiv.className = "error"; return; }
+        let data = {
+            username: f.username.value,
+            first_name: f.first_name.value,
+            last_name: f.last_name.value,
+            role: f.role.value,
+            organization: f.organization.value,
+            email: f.email.value,
+            contact: f.contact.value,
+            password: pw,
+            operations: [],
+            page_access: []
+        };
+        let ops = f.querySelectorAll('input[name="operations"]:checked');
+        for(let i=0;i<ops.length;i++){ data.operations.push(ops[i].value); }
+        let pags = f.querySelectorAll('input[name="page_access"]:checked');
+        for(let i=0;i<pags.length;i++){ data.page_access.push(pags[i].value); }
+        fetch('/register', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            const type = response.headers.get("Content-Type") || "";
+            if (type.includes("application/json")) {
+                return response.json().then(resp => {
+                    msgDiv.textContent = resp.message || "Registered!";
+                    msgDiv.className = resp.success ? "success" : "error";
+                    if(resp.success) f.reset();
+                });
+            } else if (type.includes("application/octet-stream") || type.includes("application/")) {
+                return response.blob().then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.username + '.pvt';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    msgDiv.textContent = "Registration successful! Key downloaded.";
+                    msgDiv.className = "success";
+                    f.reset();
+                });
+            } else {
+                return response.text().then(txt => { msgDiv.textContent = "Unknown response: " + txt; msgDiv.className = "error"; });
+            }
+        })
+        .catch(e => { msgDiv.textContent = "Registration failed: " + e.message; msgDiv.className = "error"; });
+    }
+}
+
+function loadUserList() {
+    fetch('/list_all_users')
+    .then(r => r.json())
+    .then(users => {
+        let sel = document.getElementById('userSelect');
+        sel.innerHTML = '<option value="">-- Select a user --</option>';
+        if (Array.isArray(users)) {
+            users.forEach(u => {
+                sel.innerHTML += `<option value="${u.username}">${u.username}</option>`;
+            });
+        }
+        document.getElementById('removeBtn').disabled = true;
+    });
+}
+
+document.getElementById('userSelect').onchange = function() {
+    document.getElementById('removeBtn').disabled = !this.value;
+    document.getElementById('remove-message').textContent = '';
+    document.getElementById('remove-message').className = '';
+}
+
+document.getElementById('removeBtn').onclick = function() {
+    let user = document.getElementById('userSelect').value;
+    let msgDiv = document.getElementById('remove-message');
+    msgDiv.textContent = '';
+    msgDiv.className = '';
+    if(!user) return;
+    if(!confirm("Are you sure you want to remove user '" + user + "'?")) return;
+    fetch('/remove-user', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ username: user })
+    })
+    .then(r => r.json())
+    .then(resp => {
+        msgDiv.textContent = resp.message || "Operation complete.";
+        msgDiv.className = resp.success ? "success" : "error";
+        loadUserList();
+        document.getElementById('removeBtn').disabled = true;
+    })
+    .catch(() => {
+        msgDiv.textContent = "Error deleting user.";
+        msgDiv.className = "error";
+    });
+}
+</script>
+</body>
+</html>

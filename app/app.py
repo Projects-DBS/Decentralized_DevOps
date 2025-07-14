@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import zipfile
 from flask import Flask, json, jsonify, render_template, request, redirect, send_file, url_for, flash, session
-from services.ipfs import ipfs_connect, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys
+from services.ipfs import ipfs_connect, remove_user_info, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
 from services.crypto import decrypt_openssl
 from services.session import check_session
 from werkzeug.utils import secure_filename
@@ -65,6 +65,17 @@ IPFS_URL = "http://127.0.0.1:5001"
 #     except Exception:
 #         return "Unknown error occurred!"
 
+@app.route('/list_all_users', methods = ['GET'])
+def list_all_users_info():
+    status = check_session( session,"user_list")
+    if status != True:
+        flash(status)
+        return redirect(url_for("login"))
+    try:
+        users = list_all_users(ipns_key_access_control)
+        return jsonify([{"username": u} for u in users])
+    except:
+        return jsonify ({"status":False, "message": "Error retriving the user list."})
 
 
 @app.route("/trigger-ci", methods=['GET','POST'])
@@ -75,8 +86,35 @@ def trigger_ci_post():
         return redirect(url_for("login"))
     return render_template("ci.html")
 
-    
 
+@app.route("/remove-user", methods=['GET'])
+def remove_user_page_load():
+    status = check_session( session,"remove_user")
+    if status != True:
+        flash(status)
+        return redirect(url_for("login"))
+    return render_template("remove_user.html")
+    
+@app.route("/remove-user", methods=['POST'])
+def remove_user():
+    try:
+        status = check_session( session,"remove_user")
+        if status != True:
+            flash(status)
+            return redirect(url_for("login"))
+        data = request.get_json()
+        if not data.get('username'):
+            return False, "Username is missing", 400
+        username = data.get('username')
+        if username == "admin" or username == "Admin":
+            return jsonify({"success": False, "message": "You cannot remove admin from the Access."})
+        success, message = remove_user_info(ipns_key_access_control, username)
+        return jsonify({"success": success, "message": message})
+    except:
+        success = False
+        message = "Unable to remove the user from the Access Control list."
+        return jsonify({"success": success, "message": message})
+        
 
 
 
@@ -836,18 +874,18 @@ def deploy_page():
 
 
 
-@app.route("/register-user", methods=['GET'])
+@app.route("/user-management", methods=['GET'])
 def reg_user():
-    status = check_session( session,"user_registration")
+    status = check_session( session,"user_management")
     if status != True:
         flash("Session expired!")
         return redirect(url_for("login"))
-    return render_template("registration.html")
+    return render_template("user_management.html")
 
 
 @app.route("/registration_parameter", methods=['GET'])
 def reg_parameters():
-    status = check_session( session,"user_registration")
+    status = check_session( session,"user_management")
     if status != True:
         flash("Session expired!")
         return redirect(url_for("login"))
@@ -863,7 +901,7 @@ def reg_parameters():
 
 @app.route("/registration_parameter_pages", methods=['GET'])
 def reg_parameters_pages():
-    status = check_session( session,"user_registration")
+    status = check_session( session,"user_management")
     if status != True:
         flash("Session expired!")
         return redirect(url_for("login"))
@@ -880,7 +918,7 @@ def reg_parameters_pages():
 
 @app.route("/register", methods=['POST'])
 def register():
-    status = check_session( session,"user_registration")
+    status = check_session( session,"user_management")
     if status != True:
         flash("Session expired!")
         return jsonify({"success": False, "message": "Session expired!"}), 401
