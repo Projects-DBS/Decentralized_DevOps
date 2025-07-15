@@ -660,7 +660,7 @@ def get_all_projects():
 def trigger_ci_build():
     status = check_session(session, "ci")
     if status != True:
-        flash("Session expired!")
+        flash(status)
         return redirect(url_for("login"))
 
     data = request.get_json()
@@ -722,7 +722,7 @@ def trigger_ci_build():
     except Exception:
         builds_data = {"project_builds": []}
     builds_list = builds_data.get("project_builds", [])
-    matching_builds = [b for b in builds_list if b.get("project_name") == project_name and b.get("tag") == tag]
+    matching_builds = [b for b in builds_list if b.get("project_name") == project_name]
     if matching_builds:
         try:
             max_version = max(int(b.get("version", 0)) for b in matching_builds)
@@ -913,11 +913,18 @@ def trigger_ci_build():
 
 @app.route("/deploy-page", methods=['POST'])
 def deploy_page():
-    status = check_session( session,"deploy")
-    if status != True:
-        flash("Session expired!")
+    status = str(check_session(session, "deploy"))
+    if "Session expired" in status:
+        flash(status)
         return redirect(url_for("login"))
-    return render_template("deploy.html")
+    elif status == "True":
+        return render_template("deploy.html")
+    elif "Unauthorized" in status:
+        flash(status)
+        return render_template("cicd_operations.html")
+    elif "Unknown" in status:
+        flash(status)
+        return render_template("cicd_operations.html")
 
 
 
@@ -926,7 +933,7 @@ def deploy_page():
 def reg_user():
     status = check_session( session,"user_management")
     if status != True:
-        flash("Session expired!")
+        flash(status)
         return redirect(url_for("login"))
     return render_template("user_management.html")
 
@@ -935,12 +942,12 @@ def reg_user():
 def reg_parameters():
     status = check_session( session,"user_management")
     if status != True:
-        flash("Session expired!")
+        flash(status)
         return redirect(url_for("login"))
     
     access_info = session.get("access_info")
     if not access_info:
-        flash("Session expired!")
+        flash(status)
         return redirect(url_for("login"))
     
     operations = access_info.get("operations", [])
@@ -951,12 +958,12 @@ def reg_parameters():
 def reg_parameters_pages():
     status = check_session( session,"user_management")
     if status != True:
-        flash("Session expired!")
+        flash(status)
         return redirect(url_for("login"))
     
     access_info = session.get("access_info")
     if not access_info:
-        flash("Session expired!")
+        flash(status)
         return redirect(url_for("login"))
     
     pages = access_info.get("pages", [])
@@ -968,8 +975,8 @@ def reg_parameters_pages():
 def register():
     status = check_session( session,"user_management")
     if status != True:
-        flash("Session expired!")
-        return jsonify({"success": False, "message": "Session expired!"}), 401
+        flash(status)
+        return jsonify({"success": False, "message": status}), 401
     data = request.get_json()
     formatted = {
         "username": data.get('username', ''),
@@ -1030,6 +1037,19 @@ def register():
         
         datas = json.loads(latest_record)
         print("part 5")
+        
+        username = data.get('username', '')
+        existing_user = False
+
+        if "access_control" in datas and isinstance(datas["access_control"], list):
+            for entry in datas["access_control"]:
+                if isinstance(entry, dict):
+                    if username in entry:
+                        existing_user = True
+                        break
+        if existing_user:
+             return jsonify({"success": False, "message": f"Username '{username}' already exists."}), 400
+
         if "access_control" in datas and isinstance(datas["access_control"], list):
             datas["access_control"].append(access_control)
             print("part 6")
