@@ -86,6 +86,7 @@
         }
         #reg-message.success, #remove-message.success { color: #2e7d32; }
         #reg-message.error, #remove-message.error { color: #d32f2f; }
+        #roleInfo { margin:10px 0; color:#357; font-size:0.97em; min-height:22px;}
         @media (max-width: 600px) {
             .container { max-width: 99vw; padding: 10px 2vw 15px 2vw;}
             .nav-btns button { font-size: 15.2px; }
@@ -113,9 +114,17 @@
             <label>Last Name</label>
             <input type="text" name="last_name" required>
             <label>Role</label>
-            <input type="text" name="role" required>
+            <select name="role" id="roleSelect" required>
+                <option value="">-- Select a role --</option>
+                <option value="admin">Admin</option>
+                <option value="developer">Developer</option>
+                <option value="qa">QA</option>
+            </select>
+            <div id="roleInfo"></div>
             <label>Organization</label>
-            <input type="text" name="organization" required>
+            <select name="organization" id="orgSelect" required>
+                <option value="">-- Select organization --</option>
+            </select>
             <label>Email</label>
             <input type="email" name="email" required>
             <label>Contact</label>
@@ -163,9 +172,49 @@ function showSection(section) {
 document.getElementById('regNav').onclick = function(){ showSection('registration'); };
 document.getElementById('removeNav').onclick = function(){ showSection('remove'); };
 
-// ---- MAKE CHECKBOXES VERTICAL, LABEL ALIGNED ----
-window.onload = function() {
-    fetch('/registration_parameter')
+// Show role info for selected role
+const ROLE_DETAILS = {
+    admin: [
+        "Project Manager",
+        "Product Owner",
+        "Administrator",
+        "DevOps Engineer"
+    ],
+    developer: [
+        "UI Developer",
+        "Backend Developer"
+    ],
+    qa: [
+        "Application Tester",
+        "Penetration Tester"
+    ]
+};
+document.getElementById('roleSelect').onchange = function() {
+    const infoDiv = document.getElementById('roleInfo');
+    const selected = this.value;
+    if (ROLE_DETAILS[selected]) {
+        infoDiv.textContent = "Includes: " + ROLE_DETAILS[selected].join(', ');
+    } else {
+        infoDiv.textContent = '';
+    }
+};
+
+// Load organization list from /organizations and fill dropdown
+fetch('/organizations')
+  .then(r => r.json())
+  .then(orgs => {
+      const sel = document.getElementById('orgSelect');
+      sel.innerHTML = '<option value="">-- Select organization --</option>';
+      orgs.forEach(org => {
+          const opt = document.createElement('option');
+          opt.value = org;
+          opt.textContent = org;
+          sel.appendChild(opt);
+      });
+  });
+
+// Operations checkboxes
+fetch('/registration_parameter')
     .then(r=>r.json()).then(d=>{
         let ops = d.operations || [];
         let box = '';
@@ -174,7 +223,8 @@ window.onload = function() {
         }
         document.getElementById('operations').innerHTML = box;
     });
-    fetch('/registration_parameter_pages')
+// Page access checkboxes
+fetch('/registration_parameter_pages')
     .then(r=>r.json()).then(d=>{
         let pages = d.page_access || [];
         let box = '';
@@ -183,65 +233,66 @@ window.onload = function() {
         }
         document.getElementById('pages').innerHTML = box;
     });
-    document.getElementById('regForm').onsubmit = function(e){
-        e.preventDefault();
-        let f = e.target;
-        let pw = f.password.value, cpw = f.confirm_password.value;
-        let msgDiv = document.getElementById('reg-message');
-        msgDiv.textContent = '';
-        msgDiv.className = '';
-        if(!pw || !cpw) { msgDiv.textContent = "Password fields cannot be empty."; msgDiv.className = "error"; return; }
-        if(pw.length < 6) { msgDiv.textContent = "Password should be at least 6 characters."; msgDiv.className = "error"; return; }
-        if(pw !== cpw) { msgDiv.textContent = "Passwords do not match."; msgDiv.className = "error"; return; }
-        let data = {
-            username: f.username.value,
-            first_name: f.first_name.value,
-            last_name: f.last_name.value,
-            role: f.role.value,
-            organization: f.organization.value,
-            email: f.email.value,
-            contact: f.contact.value,
-            password: pw,
-            operations: [],
-            page_access: []
-        };
-        let ops = f.querySelectorAll('input[name="operations"]:checked');
-        for(let i=0;i<ops.length;i++){ data.operations.push(ops[i].value); }
-        let pags = f.querySelectorAll('input[name="page_access"]:checked');
-        for(let i=0;i<pags.length;i++){ data.page_access.push(pags[i].value); }
-        fetch('/register', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify(data)
-        })
-        .then(response => {
-            const type = response.headers.get("Content-Type") || "";
-            if (type.includes("application/json")) {
-                return response.json().then(resp => {
-                    msgDiv.textContent = resp.message || "Registered!";
-                    msgDiv.className = resp.success ? "success" : "error";
-                    if(resp.success) f.reset();
-                });
-            } else if (type.includes("application/octet-stream") || type.includes("application/")) {
-                return response.blob().then(blob => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = data.username + '.pvt';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(url);
-                    msgDiv.textContent = "Registration successful! Key downloaded.";
-                    msgDiv.className = "success";
-                    f.reset();
-                });
-            } else {
-                return response.text().then(txt => { msgDiv.textContent = "Unknown response: " + txt; msgDiv.className = "error"; });
-            }
-        })
-        .catch(e => { msgDiv.textContent = "Registration failed: " + e.message; msgDiv.className = "error"; });
-    }
+
+// Registration form submit
+document.getElementById('regForm').onsubmit = function(e){
+    e.preventDefault();
+    let f = e.target;
+    let pw = f.password.value, cpw = f.confirm_password.value;
+    let msgDiv = document.getElementById('reg-message');
+    msgDiv.textContent = '';
+    msgDiv.className = '';
+    if(!pw || !cpw) { msgDiv.textContent = "Password fields cannot be empty."; msgDiv.className = "error"; return; }
+    if(pw.length < 6) { msgDiv.textContent = "Password should be at least 6 characters."; msgDiv.className = "error"; return; }
+    if(pw !== cpw) { msgDiv.textContent = "Passwords do not match."; msgDiv.className = "error"; return; }
+    let data = {
+        username: f.username.value,
+        first_name: f.first_name.value,
+        last_name: f.last_name.value,
+        role: f.role.value,
+        organization: f.organization.value,
+        email: f.email.value,
+        contact: f.contact.value,
+        password: pw,
+        operations: [],
+        page_access: []
+    };
+    let ops = f.querySelectorAll('input[name="operations"]:checked');
+    for(let i=0;i<ops.length;i++){ data.operations.push(ops[i].value); }
+    let pags = f.querySelectorAll('input[name="page_access"]:checked');
+    for(let i=0;i<pags.length;i++){ data.page_access.push(pags[i].value); }
+    fetch('/register', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        const type = response.headers.get("Content-Type") || "";
+        if (type.includes("application/json")) {
+            return response.json().then(resp => {
+                msgDiv.textContent = resp.message || "Registered!";
+                msgDiv.className = resp.success ? "success" : "error";
+                if(resp.success) f.reset();
+            });
+        } else if (type.includes("application/octet-stream") || type.includes("application/")) {
+            return response.blob().then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = data.username + '.pvt';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                msgDiv.textContent = "Registration successful! Key downloaded.";
+                msgDiv.className = "success";
+                f.reset();
+            });
+        } else {
+            return response.text().then(txt => { msgDiv.textContent = "Unknown response: " + txt; msgDiv.className = "error"; });
+        }
+    })
+    .catch(e => { msgDiv.textContent = "Registration failed: " + e.message; msgDiv.className = "error"; });
 }
 
 function loadUserList() {

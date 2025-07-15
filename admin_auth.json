@@ -3,7 +3,7 @@
     "first_name" : "CICD",
     "last_name" : "Administrator",
     "role": "admin",
-    "organization": "Dublin Bussiness School",
+    "organization": ["Dublin Bussiness School", "ABCD Inc", "XYZ Corp"],
     "email" : "edwinshabu1998@gmail.com",
     "contact" : "0892205440",
     "operations":["push","pull","ci","cd","manage_permission","logs"],

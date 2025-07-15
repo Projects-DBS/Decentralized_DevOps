@@ -19,6 +19,8 @@ ports = {
     "prod": 1003
 }
 
+
+
 status, keys = ipns_keys()
 if status != True:
     print(keys)
@@ -28,6 +30,8 @@ ipns_key_projects = keys.get("projects")
 ipns_key_project_builds = keys.get("project_builds")
 ipns_key_misc = keys.get("misc")
 ipns_key_logs = keys.get("logs")
+ipns_key_roles = keys.get("roles")
+
 
 
 app = Flask(__name__)
@@ -162,7 +166,8 @@ def login():
                 expiry_time = datetime.now(timezone.utc) + timedelta(minutes=10)
                 session['expiry'] = expiry_time.timestamp()
                 session["page_access"] = access_info.get("pages", [])
-                session["access_info"] = access_info  # <--- Store access_info in session
+                session["access_info"] = access_info
+                session["organization"] = access_info.get("organization", []) # <--- Store access_info in session
 
                 if access_info.get("role") == "admin":
                     return redirect(url_for('admin_dashboard'))
@@ -183,6 +188,49 @@ def login():
             return redirect(url_for("login"))
 
     return render_template("login.html")
+
+
+@app.route("/organizations", methods=["GET"])
+def list_org():
+    try:
+        status = check_session(session,"user_management")
+        if status != True:
+            flash(status)
+            return redirect(url_for("login"))
+        orgs = session.get("organization", [])
+        return jsonify(orgs)
+
+    except:
+        return jsonify({"message":"Unable to retrieve roles from IPFS Cluster."})
+
+
+
+@app.route("/roles", methods=["GET"])
+def list_roles():
+    try:
+        status = check_session(session,"user_management")
+        if status != True:
+            flash(status)
+            return redirect(url_for("login"))
+        print(ipns_key_roles)
+        cmds = f"ipfs name resolve --nocache -r {ipns_key_roles}"
+        result = subprocess.run(cmds, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            return jsonify({"message":"Unable to retrieve roles from the IPNS Records."})
+        role_cid = result.stdout.strip().replace('\n','')
+
+        print(role_cid)
+        
+        cmd1 = f"ipfs cat {role_cid}"
+        result = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            return jsonify({"message":"Unable to retrieve roles from the IPFS Cluster."})
+        role_info = result.stdout.strip().replace('\n','')
+        roles = json.loads(role_info)
+        print(roles)
+        return roles["roles"]
+    except Exception as e:
+        return jsonify({"message":"Unable to retrieve roles from IPFS Cluster."})
 
 @app.route("/admin-dashboard", methods=["GET","POST"])
 def admin_dashboard():

@@ -103,6 +103,45 @@ sudo -u "${APP_USERNAME}" bash -c '
   rm "$tmpfile"
 '
 
+sudo -u "${APP_USERNAME}" bash -c '
+  tmpfile=$(mktemp)
+
+  # Write JSON to temp file (no escaping issues)
+  cat > "$tmpfile" <<EOF
+{
+  "roles": [
+    {"admin": ["Project Manager", "Product Owner", "Administrator", "DevOps Engineer"]},
+    {"developer": ["UI Developer", "Backend Developer"]},
+    {"qa": ["Application Tester", "Penetration Tester"]}
+  ]
+}
+EOF
+
+  # Add the file to IPFS Cluster and get the CID
+  cid=$(ipfs-cluster-ctl add -q "$tmpfile")
+  if [ -z "$cid" ]; then
+    echo "Error: Failed to get CID from IPFS Cluster."
+    rm "$tmpfile"
+    exit 1
+  fi
+
+  # Publish the CID to IPNS with the "projects" key
+  ipns_output=$(ipfs name publish --key="roles" /ipfs/"$cid")
+  if [ $? -ne 0 ]; then
+    echo "Error: IPNS publish failed."
+    rm "$tmpfile"
+    exit 2
+  fi
+
+  # Extract IPNS key (adjust parsing if output format changes)
+  ipns_key=$(echo "$ipns_output" | awk '\''{print $3}'\'' | cut -d":" -f1)
+  echo "Role IPNS Key is: $ipns_key"
+
+  # Clean up
+  rm "$tmpfile"
+'
+
+
 
 
 sudo -u "${APP_USERNAME}" bash -c '
