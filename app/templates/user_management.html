@@ -102,8 +102,6 @@
         <button id="regNav" class="active" type="button">Registration</button>
         <button id="removeNav" type="button">Remove User</button>
     </div>
-
-    <!-- Registration Section -->
     <div class="section show" id="registrationSection">
         <h2>Registration</h2>
         <form id="regForm" autocomplete="off">
@@ -116,9 +114,6 @@
             <label>Role</label>
             <select name="role" id="roleSelect" required>
                 <option value="">-- Select a role --</option>
-                <option value="admin">Admin</option>
-                <option value="developer">Developer</option>
-                <option value="qa">QA</option>
             </select>
             <div id="roleInfo"></div>
             <label>Organization</label>
@@ -141,8 +136,6 @@
             <div id="reg-message"></div>
         </form>
     </div>
-
-    <!-- Remove User Section -->
     <div class="section" id="removeUserSection">
         <h2>Remove User</h2>
         <label>Select User</label>
@@ -153,6 +146,83 @@
 </div>
 
 <script>
+// ----------- DYNAMIC ROLES (main only, info below) -----------
+function loadRoles() {
+    fetch('/roles')
+      .then(r => r.json())
+      .then(roles => {
+          const mainRoles = ['admin','developer','qa'];
+          const sel = document.getElementById('roleSelect');
+          sel.innerHTML = '<option value="">-- Select a role --</option>';
+          window.ROLE_MAP = {};
+          if (Array.isArray(roles)) {
+              roles.forEach(roleObj => {
+                  const roleName = Object.keys(roleObj)[0];
+                  if (mainRoles.includes(roleName)) {
+                      const descriptions = roleObj[roleName];
+                      const label = roleName.charAt(0).toUpperCase() + roleName.slice(1);
+                      window.ROLE_MAP[roleName] = descriptions.join(", ");
+                      const opt = document.createElement('option');
+                      opt.value = roleName;
+                      opt.textContent = label;
+                      sel.appendChild(opt);
+                  }
+              });
+          }
+      })
+      .catch(e => {
+          console.error("Failed to load roles:", e);
+      });
+}
+loadRoles();
+
+document.getElementById('roleSelect').onchange = function() {
+    const infoDiv = document.getElementById('roleInfo');
+    const selected = this.value;
+    if (window.ROLE_MAP && window.ROLE_MAP[selected]) {
+        infoDiv.textContent = "Includes: " + window.ROLE_MAP[selected];
+    } else {
+        infoDiv.textContent = '';
+    }
+};
+
+// ----------- ORGANIZATIONS -----------
+fetch('/organizations')
+  .then(r => r.json())
+  .then(orgs => {
+      const sel = document.getElementById('orgSelect');
+      sel.innerHTML = '<option value="">-- Select organization --</option>';
+      orgs.forEach(org => {
+          const opt = document.createElement('option');
+          opt.value = org;
+          opt.textContent = org;
+          sel.appendChild(opt);
+      });
+  });
+
+// ----------- OPERATIONS CHECKBOXES -----------
+fetch('/registration_parameter')
+    .then(r=>r.json()).then(d=>{
+        let ops = d.operations || [];
+        let box = '';
+        for(let i=0;i<ops.length;i++){
+            box += '<div class="checkbox-item"><input type="checkbox" name="operations" value="'+ops[i]+'"><span>'+ops[i]+'</span></div>';
+        }
+        document.getElementById('operations').innerHTML = box;
+    });
+
+// ----------- PAGE ACCESS CHECKBOXES -----------
+fetch('/registration_parameter_pages')
+    .then(r=>r.json()).then(d=>{
+        let pages = d.page_access || [];
+        let box = '';
+        for(let i=0;i<pages.length;i++){
+            box += '<div class="checkbox-item"><input type="checkbox" name="page_access" value="'+pages[i]+'"><span>'+pages[i]+'</span></div>';
+        }
+        document.getElementById('pages').innerHTML = box;
+    });
+
+// ----------- NAVIGATION LOGIC -----------
 function showSection(section) {
     document.getElementById('registrationSection').classList.remove('show');
     document.getElementById('removeUserSection').classList.remove('show');
@@ -172,69 +242,7 @@ function showSection(section) {
 document.getElementById('regNav').onclick = function(){ showSection('registration'); };
 document.getElementById('removeNav').onclick = function(){ showSection('remove'); };
 
-// Show role info for selected role
-const ROLE_DETAILS = {
-    admin: [
-        "Project Manager",
-        "Product Owner",
-        "Administrator",
-        "DevOps Engineer"
-    ],
-    developer: [
-        "UI Developer",
-        "Backend Developer"
-    ],
-    qa: [
-        "Application Tester",
-        "Penetration Tester"
-    ]
-};
-document.getElementById('roleSelect').onchange = function() {
-    const infoDiv = document.getElementById('roleInfo');
-    const selected = this.value;
-    if (ROLE_DETAILS[selected]) {
-        infoDiv.textContent = "Includes: " + ROLE_DETAILS[selected].join(', ');
-    } else {
-        infoDiv.textContent = '';
-    }
-};
-
-// Load organization list from /organizations and fill dropdown
-fetch('/organizations')
-  .then(r => r.json())
-  .then(orgs => {
-      const sel = document.getElementById('orgSelect');
-      sel.innerHTML = '<option value="">-- Select organization --</option>';
-      orgs.forEach(org => {
-          const opt = document.createElement('option');
-          opt.value = org;
-          opt.textContent = org;
-          sel.appendChild(opt);
-      });
-  });
-
-// Operations checkboxes
-fetch('/registration_parameter')
-    .then(r=>r.json()).then(d=>{
-        let ops = d.operations || [];
-        let box = '';
-        for(let i=0;i<ops.length;i++){
-            box += '<div class="checkbox-item"><input type="checkbox" name="operations" value="'+ops[i]+'"><span>'+ops[i]+'</span></div>';
-        }
-        document.getElementById('operations').innerHTML = box;
-    });
-// Page access checkboxes
-fetch('/registration_parameter_pages')
-    .then(r=>r.json()).then(d=>{
-        let pages = d.page_access || [];
-        let box = '';
-        for(let i=0;i<pages.length;i++){
-            box += '<div class="checkbox-item"><input type="checkbox" name="page_access" value="'+pages[i]+'"><span>'+pages[i]+'</span></div>';
-        }
-        document.getElementById('pages').innerHTML = box;
-    });
-
-// Registration form submit
+// ----------- REGISTRATION SUBMIT -----------
 document.getElementById('regForm').onsubmit = function(e){
     e.preventDefault();
     let f = e.target;
@@ -295,6 +303,7 @@ document.getElementById('regForm').onsubmit = function(e){
     .catch(e => { msgDiv.textContent = "Registration failed: " + e.message; msgDiv.className = "error"; });
 }
 
+// ----------- REMOVE USER -----------
 function loadUserList() {
     fetch('/list_all_users')
     .then(r => r.json())
