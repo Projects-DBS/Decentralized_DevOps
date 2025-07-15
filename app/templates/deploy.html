@@ -63,6 +63,29 @@
         <button id="deployButton" class="w-full bg-green-600 text-white p-2 rounded-md hover:bg-green-700">Deploy</button>
     </div>
 
+    <!-- Minimalist Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded shadow text-center">
+            <div class="loader mb-3"></div>
+            <span class="text-lg font-medium text-gray-800">Deploying, please wait...</span>
+        </div>
+    </div>
+    <!-- Loader Animation Style -->
+    <style>
+    .loader {
+      border: 4px solid #e5e7eb;
+      border-top: 4px solid #22c55e;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    </style>
+
     <script>
         let selectedCid = null;
         let serverIps = [];
@@ -114,11 +137,11 @@
                 const tagSelect = document.getElementById('tag');
                 const versionSelect = document.getElementById('version');
 
-                projectNameSelect.innerHTML = '<option value="">Select Project</option>' + 
+                projectNameSelect.innerHTML = '<option value="">Select Project</option>' +
                     projectNames.map(name => `<option value="${name}">${name}</option>`).join('');
-                tagSelect.innerHTML = '<option value="">Select Tag</option>' + 
+                tagSelect.innerHTML = '<option value="">Select Tag</option>' +
                     tags.map(tag => `<option value="${tag}">${tag}</option>`).join('');
-                versionSelect.innerHTML = '<option value="">Select Version</option>' + 
+                versionSelect.innerHTML = '<option value="">Select Version</option>' +
                     versions.map(version => `<option value="${version}">${version}</option>`).join('');
 
                 // Update CID when all dropdowns are selected
@@ -127,13 +150,13 @@
                     const tag = tagSelect.value;
                     const version = versionSelect.value;
                     if (project && tag && version) {
-                        const selectedBuild = builds.find(build => 
-                            build.project_name === project && 
-                            build.tag === tag && 
+                        const selectedBuild = builds.find(build =>
+                            build.project_name === project &&
+                            build.tag === tag &&
                             build.version === version
                         );
                         selectedCid = selectedBuild ? selectedBuild.build_cid : null;
-                        document.getElementById('selectedCid').textContent = 
+                        document.getElementById('selectedCid').textContent =
                             selectedCid ? `Selected CID: ${selectedCid}` : 'No matching build found';
                     } else {
                         selectedCid = null;
@@ -172,7 +195,7 @@
                 const data = await response.json();
                 availableIps = Object.keys(data).filter(ip => data[ip] === 'Available');
                 const portList = document.getElementById('portAvailability');
-                portList.innerHTML = Object.entries(data).map(([ip, status]) => 
+                portList.innerHTML = Object.entries(data).map(([ip, status]) =>
                     `<li class="${status === 'Available' ? 'text-green-600' : 'text-red-600'}">${ip}: ${status}</li>`
                 ).join('');
                 if (availableIps.length === 0) {
@@ -245,29 +268,37 @@
             }
         }
 
-        // Deploy to servers
+        // Deploy to servers (with loading overlay)
         async function deploy() {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            loadingOverlay.classList.remove('hidden');
+
             const artifactPassword = document.getElementById('artifactPassword').value;
             const serverPassword = document.getElementById('serverPassword').value;
             const tag = document.getElementById('tag').value;
 
             if (!selectedCid) {
+                loadingOverlay.classList.add('hidden');
                 alert('Please select a project, tag, and version.');
                 return;
             }
             if (!artifactPassword) {
+                loadingOverlay.classList.add('hidden');
                 alert('Please enter the artifact password.');
                 return;
             }
             if (!serverPassword) {
+                loadingOverlay.classList.add('hidden');
                 alert('Please enter the server password.');
                 return;
             }
             if (!tag) {
+                loadingOverlay.classList.add('hidden');
                 alert('Please select a tag.');
                 return;
             }
             if (availableIps.length === 0) {
+                loadingOverlay.classList.add('hidden');
                 alert('No available servers for deployment. Please check port availability first.');
                 return;
             }
@@ -292,12 +323,19 @@
                 const data = await response.json();
                 if (data.status === 'success') {
                     alert(data.message || 'Deployment successful!');
+                } else if (data.status === 'partial_failure') {
+                    alert(
+                        (data.message || 'Some deployments failed.') +
+                        '\nFailed Servers: ' + (data.failed_servers ? data.failed_servers.join(', ') : '') +
+                        '\nCount: ' + (data.count !== undefined ? data.count : '')
+                    );
                 } else {
                     alert(data.message || 'Deployment failed.');
                 }
             } catch (error) {
-                console.error('Error deploying:', error);
                 alert('Deployment failed: ' + error.message);
+            } finally {
+                loadingOverlay.classList.add('hidden');
             }
         }
 

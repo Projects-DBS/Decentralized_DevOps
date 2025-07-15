@@ -5,6 +5,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
+from time import sleep
 import zipfile
 from flask import Flask, json, jsonify, render_template, request, redirect, send_file, url_for, flash, session
 from services.ipfs import ipfs_connect, remove_user_info, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
@@ -362,8 +363,6 @@ def build_info():
 #     except Exception as e:
 #         return jsonify({"status": "error", "message": f"Decommissioning failed: {str(e)}"}), 500
 
-
-
 @app.route('/decommission', methods=['POST'])
 def decommission():
     status = check_session(session, "decommission")
@@ -375,26 +374,105 @@ def decommission():
         server_list = data.get('server_list', [])
         deployment_server_password = data.get('deployment_server_password')
         tag = data.get('tag')
-        port = ports.get(tag)
+
+        port = ports.get(tag)  # Assuming your 'ports' dict exists
 
         if not all([server_list, deployment_server_password, tag, port]):
             return jsonify({"status": "error", "message": "Missing required parameters"}), 400
 
-        for server in server_list:
-            # Stop the running application
-            command_stop = (
-                f'pkill -f "gunicorn.*:{port}" && '
-                f'rm -rf /home/guest/www/{tag}'
-            )
-            cmd_stop = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command_stop}"'
-            data_stop = subprocess.run(cmd_stop, shell=True, capture_output=True, text=True)
-            if data_stop.returncode != 0:
-                return jsonify({"status": "error", "message": f"Failed to decommission server {server}: {data_stop.stderr.strip()}"}), 500
+        failed_servers = []
+        success_servers = []
 
-        return jsonify({"status": "success", "message": "Decommission completed successfully!"})
+        for server in server_list:
+            try:
+                # Correctly quoted pkill for only the right gunicorn
+                stop_cmd = f'fuser -k {port}/tcp || true'
+                cmd = (
+                    f'sshpass -p "{deployment_server_password}" ssh -o StrictHostKeyChecking=no '
+                    f'guest@{server} "{stop_cmd}"'
+                )
+                stop_data = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                
+                # Optionally clean up the deployment directory
+                project_dir = f"/home/guest/www/{tag}"
+                cleanup_cmd = f'rm -rf {project_dir}'
+                cleanup_full_cmd = (
+                    f'sshpass -p "{deployment_server_password}" ssh -o StrictHostKeyChecking=no '
+                    f'guest@{server} "{cleanup_cmd}"'
+                )
+                cleanup_data = subprocess.run(cleanup_full_cmd, shell=True, capture_output=True, text=True, timeout=30)
+
+                # Check if both commands were successful
+                if cleanup_data.returncode == 0 and stop_data.returncode == 0:
+                    success_servers.append(server)
+                else:
+                    failed_servers.append({
+                        "server": server,
+                        "stop_returncode": stop_data.returncode,
+                        "stop_stdout": stop_data.stdout.strip(),
+                        "stop_stderr": stop_data.stderr.strip(),
+                        "cleanup_returncode": cleanup_data.returncode,
+                        "cleanup_stderr": cleanup_data.stderr.strip()
+                    })
+
+            except Exception as ex:
+                failed_servers.append({"server": server, "exception": str(ex)})
+                continue
+
+        if len(success_servers) == len(server_list):
+            return jsonify({"status": "success", "message": "Decommission done!"})
+        elif len(success_servers) == 0:
+            return jsonify({
+                "status": "error",
+                "message": "Decommission failed on all servers.",
+                "failed_servers": failed_servers
+            })
+        else:
+            return jsonify({
+                "status": "partial_failure",
+                "failed_servers": failed_servers,
+                "count": len(failed_servers),
+                "message": "Some decommissions failed. Try again."
+            })
 
     except Exception as e:
         return jsonify({"status": "error", "message": f"Decommission failed: {str(e)}"}), 500
+
+
+
+# @app.route('/decommission', methods=['POST'])
+# def decommission():
+#     status = check_session(session, "decommission")
+#     if status != True:
+#         return jsonify({"status": "error", "message": str(status)}), 401
+
+#     try:
+#         data = request.get_json()
+#         server_list = data.get('server_list', [])
+#         deployment_server_password = data.get('deployment_server_password')
+#         tag = data.get('tag')
+#         port = ports.get(tag)
+
+#         if not all([server_list, deployment_server_password, tag, port]):
+#             return jsonify({"status": "error", "message": "Missing required parameters"}), 400
+
+#         for server in server_list:
+#             # Stop the running application
+#             command_stop = (
+#                 f'pkill -f "gunicorn.*:{port}" && '
+#                 f'rm -rf /home/guest/www/{tag}'
+#             )
+#             cmd_stop = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command_stop}"'
+#             data_stop = subprocess.run(cmd_stop, shell=True, capture_output=True, text=True)
+#             if data_stop.returncode != 0:
+#                 return jsonify({"status": "error", "message": f"Failed to decommission server {server}: {data_stop.stderr.strip()}"}), 500
+
+#         return jsonify({"status": "success", "message": "Decommission completed successfully!"})
+
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": f"Decommission failed: {str(e)}"}), 500
+
+
 
 @app.route('/deploy', methods=['POST'])
 def deploy():
@@ -414,38 +492,146 @@ def deploy():
         if not all([server_list, build_cid, artifact_password, deployment_server_password, tag, port]):
             return jsonify({"status": "error", "message": "Missing required parameters"}), 400
 
+        failed_servers = []
+        success_servers = []
+
         for server in server_list:
-            command = f'mkdir -p /home/guest/www/{tag}/{build_cid}/webapp/ && ipfs get {build_cid} -o /home/guest/www/{tag}/{build_cid}/webapp/'
-            cmd = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command}"'
-            data = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            if data.returncode != 0:
-                return jsonify({"status": "error", "message": f"Failed to fetch artifact for server {server}: {data.stderr.strip()}"}), 500
+            try:
+                # 1. Download via IPFS
+                cmd = (
+                    f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
+                    f'"mkdir -p /home/guest/www/{tag}/{build_cid}/webapp/ && '
+                    f'ipfs get {build_cid} -o /home/guest/www/{tag}/{build_cid}/webapp/"'
+                )
+                data = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
+                if data.returncode != 0:
+                    failed_servers.append({"server": server, "step": 1, "stderr": data.stderr.strip()})
+                    continue
 
-            command1 = f'openssl enc -d -aes-256-cbc -pbkdf2 -in /home/guest/www/{tag}/{build_cid}/webapp/{build_cid} -out /home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip -pass pass:{artifact_password}'
-            cmd1 = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command1}"'
-            data1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
-            if data1.returncode != 0:
-                return jsonify({"status": "error", "message": f"Failed to decrypt artifact for server {server}: {data1.stderr.strip()}"}), 500
+                # 2. Decrypt artifact
+                cmd1 = (
+                    f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
+                    f'"openssl enc -d -aes-256-cbc -pbkdf2 '
+                    f'-in /home/guest/www/{tag}/{build_cid}/webapp/{build_cid} '
+                    f'-out /home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip '
+                    f'-pass pass:{artifact_password}"'
+                )
+                data1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True, timeout=60)
+                if data1.returncode != 0:
+                    failed_servers.append({"server": server, "step": 2, "stderr": data1.stderr.strip()})
+                    continue
 
-            zip_file = f'/home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip'
-            root_install = f"/home/guest/www/{tag}/{build_cid}/webapp"
-            command2 = (
-                f'unzip -o "{zip_file}" -d "{root_install}" && '
-                f'cd "{root_install}" && '
-                f'found=$(find . -type f -name app.py | head -n 1) && '
-                f'dir=$(dirname "$found") && '
-                f'nohup gunicorn app:app --bind 0.0.0.0:{port} > app.log 2>&1 & '
-                f'echo "Application deployed on {server} on port {port}"'
-            )
-            cmd2 = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command2}"'
-            data2 = subprocess.run(cmd2, shell=True, capture_output=True, text=True)
-            if data2.returncode != 0:
-                return jsonify({"status": "error", "message": f"Deployment failed on server {server}: {data2.stderr.strip()}"}), 500
+                # 3. Unzip, start gunicorn, check port
+                project_dir = f"/home/guest/www/{tag}/{build_cid}/webapp"
+                zip_file = f"{project_dir}/{build_cid}.zip"
+                run_command = (
+                    f'unzip -o "{zip_file}" -d "{project_dir}" || (echo "Unzip failed"; exit 1); '
+                    f'cd "{project_dir}" || exit 1; '
+                    f'if [ ! -f app.py ]; then echo "app.py not found"; exit 1; fi; '
+                    f'nohup gunicorn app:app --bind 0.0.0.0:{port} > app.log 2>&1 & '
+                    f'sleep 3; '
+                    f'(ss -ltn | grep ":{port} " || netstat -ltn 2>/dev/null | grep ":{port} ") && echo "__DEPLOY_SUCCESS__"'
+                )
+                cmd2 = (
+                    f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{run_command}"'
+                )
+                data2 = subprocess.run(cmd2, shell=True, capture_output=True, text=True, timeout=90)
 
-        return jsonify({"status": "success", "message": "Deployment done!"})
+                if "__DEPLOY_SUCCESS__" in data2.stdout:
+                    success_servers.append(server)
+                else:
+                    # Get last 50 lines of app.log for diagnostics
+                    log_cmd = (
+                        f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
+                        f'"tail -n 50 {project_dir}/app.log 2>/dev/null"'
+                    )
+                    log_data = subprocess.run(log_cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    failed_servers.append({
+                        "server": server,
+                        "step": 3,
+                        "stderr": data2.stderr.strip(),
+                        "app_log": log_data.stdout.strip() or "(no app.log found)"
+                    })
+
+            except subprocess.TimeoutExpired:
+                failed_servers.append({"server": server, "step": "timeout"})
+                continue
+            except Exception as ex:
+                failed_servers.append({"server": server, "step": "exception", "exception": str(ex)})
+                continue
+
+        if len(success_servers) == len(server_list):
+            return jsonify({"status": "success", "message": "Deployment done!"})
+        elif len(success_servers) == 0:
+            return jsonify({
+                "status": "error",
+                "message": "Deployment failed on all servers.",
+                "failed_servers": failed_servers
+            })
+        else:
+            return jsonify({
+                "status": "partial_failure",
+                "failed_servers": failed_servers,
+                "count": len(failed_servers),
+                "message": "Some deployments failed. Try to deploy again."
+            })
 
     except Exception as e:
         return jsonify({"status": "error", "message": f"Deployment failed: {str(e)}"}), 500
+
+
+
+# @app.route('/deploy', methods=['POST'])
+# def deploy():
+#     status = check_session(session, "deploy")
+#     if status != True:
+#         return jsonify({"status": "error", "message": str(status)}), 401
+
+#     try:
+#         data = request.get_json()
+#         server_list = data.get('server_list', [])
+#         build_cid = data.get('build_cid')
+#         artifact_password = data.get('artifact_password')
+#         deployment_server_password = data.get('deployment_server_password') 
+#         tag = data.get('tag')
+#         port = ports.get(tag)
+
+#         if not all([server_list, build_cid, artifact_password, deployment_server_password, tag, port]):
+#             return jsonify({"status": "error", "message": "Missing required parameters"}), 400
+
+#         for server in server_list:
+#             command = f'mkdir -p /home/guest/www/{tag}/{build_cid}/webapp/ && ipfs get {build_cid} -o /home/guest/www/{tag}/{build_cid}/webapp/'
+#             cmd = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command}"'
+#             data = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+#             if data.returncode != 0:
+#                 return jsonify({"status": "error", "message": f"Failed to fetch artifact for server {server}: {data.stderr.strip()}"}), 500
+
+#             command1 = f'openssl enc -d -aes-256-cbc -pbkdf2 -in /home/guest/www/{tag}/{build_cid}/webapp/{build_cid} -out /home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip -pass pass:{artifact_password}'
+#             cmd1 = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command1}"'
+#             data1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
+#             if data1.returncode != 0:
+#                 return jsonify({"status": "error", "message": f"Failed to decrypt artifact for server {server}: {data1.stderr.strip()}"}), 500
+
+#             zip_file = f'/home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip'
+#             root_install = f"/home/guest/www/{tag}/{build_cid}/webapp"
+#             command2 = (
+#                 f'unzip -o "{zip_file}" -d "{root_install}" && '
+#                 f'cd "{root_install}" && '
+#                 f'found=$(find . -type f -name app.py | head -n 1) && '
+#                 f'dir=$(dirname "$found") && '
+#                 f'nohup gunicorn app:app --bind 0.0.0.0:{port} > app.log 2>&1 & '
+#                 f'echo "Application deployed on {server} on port {port}"'
+#             )
+#             cmd2 = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command2}"'
+#             data2 = subprocess.run(cmd2, shell=True, capture_output=True, text=True)
+#             sleep(5)
+#             if data2.returncode != 0:
+#                 print(f"Deployment failed on server {server}: {data2.stderr.strip()}")
+
+#         return jsonify({"status": "success", "message": "Deployment done!"})
+
+#     except Exception as e:
+#         return jsonify({"status": "error", "message": f"Deployment failed: {str(e)}"}), 500
 
 
 # @app.route('/deploy', methods=['POST'])
