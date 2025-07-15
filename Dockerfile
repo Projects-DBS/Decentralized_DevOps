@@ -22,7 +22,7 @@ RUN useradd -m -s /bin/bash ${APP_USERNAME} && \
 
 # Install dependencies
 RUN apt-get update && \
-    apt-get install -y curl wget git build-essential sudo nano openssh-server jq python3-pip net-tools ufw docker.io openssl unzip zip sshpass
+    apt-get install -y curl wget git build-essential sudo nano openssh-server jq python3-pip net-tools ufw docker.io openssl unzip zip sshpass psmisc
 
 # SSH server config
 RUN mkdir /var/run/sshd
