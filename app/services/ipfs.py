@@ -297,14 +297,14 @@ def update_repo_ipnss(new_cid, version, ipns_cid, project_name, access_infos):
         return False
 
     # Step 3: Determine new version number
-    if not data['projects']:
-        version_to_use = 1
+    project_versions = [
+    p.get('version', 1) for p in data['projects']
+    if isinstance(p, dict) and p.get('project_name') == project_name
+    ]
+    if project_versions:
+        version_to_use = max(project_versions) + 1
     else:
-        try:
-            version_to_use = max(p.get('version', 1) for p in data['projects']) + 1
-        except Exception as e:
-            print(f"Version parsing error: {e}")
-            version_to_use = 1
+        version_to_use = 1
 
     # Step 4: Add new project info
     project_info = {
