@@ -36,10 +36,14 @@ ipns_key_roles = keys.get("roles")
 
 
 app = Flask(__name__)
-app.secret_key = "change_this_secret"  # Change  this for production
+app.secret_key = os.urandom(32)
 app.permanent_session_lifetime = timedelta(minutes=10)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB limit
 
+app.config['SESSION_COOKIE_HTTPONLY'] = True      # Prevents JS from reading the cookie
+app.config['SESSION_COOKIE_SECURE'] = True        # Sends cookie only over HTTPS
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'     # Or 'Strict' for more strict cross-site control
+ 
 
 TEMP_DIR = '/tmp'
 IPFS_URL = "http://127.0.0.1:5001"
@@ -440,38 +444,6 @@ def decommission():
 
 
 
-# @app.route('/decommission', methods=['POST'])
-# def decommission():
-#     status = check_session(session, "decommission")
-#     if status != True:
-#         return jsonify({"status": "error", "message": str(status)}), 401
-
-#     try:
-#         data = request.get_json()
-#         server_list = data.get('server_list', [])
-#         deployment_server_password = data.get('deployment_server_password')
-#         tag = data.get('tag')
-#         port = ports.get(tag)
-
-#         if not all([server_list, deployment_server_password, tag, port]):
-#             return jsonify({"status": "error", "message": "Missing required parameters"}), 400
-
-#         for server in server_list:
-#             # Stop the running application
-#             command_stop = (
-#                 f'pkill -f "gunicorn.*:{port}" && '
-#                 f'rm -rf /home/guest/www/{tag}'
-#             )
-#             cmd_stop = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command_stop}"'
-#             data_stop = subprocess.run(cmd_stop, shell=True, capture_output=True, text=True)
-#             if data_stop.returncode != 0:
-#                 return jsonify({"status": "error", "message": f"Failed to decommission server {server}: {data_stop.stderr.strip()}"}), 500
-
-#         return jsonify({"status": "success", "message": "Decommission completed successfully!"})
-
-#     except Exception as e:
-#         return jsonify({"status": "error", "message": f"Decommission failed: {str(e)}"}), 500
-
 
 
 @app.route('/deploy', methods=['POST'])
@@ -580,6 +552,7 @@ def deploy():
 
     except Exception as e:
         return jsonify({"status": "error", "message": f"Deployment failed: {str(e)}"}), 500
+
 
 
 
