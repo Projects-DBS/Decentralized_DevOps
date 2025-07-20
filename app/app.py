@@ -1150,8 +1150,6 @@ def register():
         "operations": data.get('operations', []),
         "pages": data.get('page_access', [])
     }
-    print("Part 1")
-    print(formatted)
     password = data.get('password','')
 
     with tempfile.NamedTemporaryFile('w', delete=False) as tmp:
@@ -1159,45 +1157,37 @@ def register():
         tmp.flush()
         tmp_path = tmp.name
 
-    print("Part 1.1")
-    print(tmp_path)
+
     
     try:
         result = subprocess.run(['ipfs', 'add', tmp_path, '-q'], capture_output=True, text=True)
         cid = result.stdout.strip()
-        print("Part 1.2")
-        print(cid)
+
         if result.returncode != 0 or not cid:
             return jsonify({"success": False, "message": "Unable to register the user."})
         cmd = f'echo -n {cid} | openssl enc -aes-256-cbc -a -salt -pbkdf2 -pass pass:{password}'
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         encrypted_info = res.stdout.strip()
-        print("Part 1.3")
-        print(encrypted_info)
+
         username = data.get('username', '')
         access_control = {
             username : encrypted_info
         }
 
-        print("Part2")
-        print(access_control)
+
 
         cmd = f'ipfs name resolve --nocache -r {ipns_key_access_control}'
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         latest_cid = res.stdout.strip()
 
-        print("part 3")
-        print(latest_cid)
 
         cmd = f'ipfs cat {latest_cid}'
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         latest_record = res.stdout.strip().replace('\n', '')
 
-        print("part 4")
-        print(latest_record)
+
         
         datas = json.loads(latest_record)
-        print("part 5")
         
         username = data.get('username', '')
         existing_user = False
@@ -1213,14 +1203,12 @@ def register():
 
         if "access_control" in datas and isinstance(datas["access_control"], list):
             datas["access_control"].append(access_control)
-            print("part 6")
-            print(datas)
+
         else:
             # if not present or not a list, initialize it as a list
             datas["access_control"] = [formatted]
         updated_json_str = json.dumps(datas, indent=2)
-        print("part 7")
-        print(updated_json_str)
+
         with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as tmp_file:
             tmp_file.write(updated_json_str)
             tmp_file_path = tmp_file.name
@@ -1228,57 +1216,13 @@ def register():
         new_ipfs_output = subprocess.run(ipfs_add_cmd, shell=True, capture_output=True, text=True)
         new_ipfs_output = new_ipfs_output.stdout.strip()
 
-        print("part 8")
-        print(new_ipfs_output)
+
 
         cmd_publish = f"ipfs name publish --key=access_control {new_ipfs_output}"
         new_ipfs_output = subprocess.run(cmd_publish, shell=True, capture_output=True, text=True)
-
-
-        passphrase = data.get('password','')
-        username = data.get('username', '')
-
-        print(f"Username: {username}")
-        print(f"Password: {passphrase}")
-
-        key_path = f"/home/guest/.ssh/{username}.pvt"
-
-
-        
-
-        cmd = [
-            "ssh-keygen",
-            "-t", "ed25519",
-            "-f", key_path,
-            "-N", passphrase
-        ]
-
-        
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-
-        print("PArt 8.2")
-        print(result)
-        if result.returncode != 0:
-            return jsonify({"success": False, "message": "Unable to generate SSH key."}), 400
-        
-
-        print("part 9")
-        if result.returncode == 0:
-            try:
-                return send_file(
-                    key_path,
-                    as_attachment=True,
-                    download_name=f"{username}.pvt"
-                )
-            except:
-                return jsonify({"success": False, "message": "Error in generating the keys or registration not successful"}), 400
-               
-
-
-
-
-
+        if new_ipfs_output.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to register the user. IPNS publish error. Contact Amdin."}), 500
+        return jsonify({"success": True, "message": "Registration complete."}), 200
         
     except:
         return jsonify({"success": False, "message": "Unable to register the user."}), 500
