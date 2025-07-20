@@ -518,6 +518,8 @@ def deploy():
                 )
                 data1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True, timeout=60)
                 if data1.returncode != 0:
+                    if "bad decrypt" in data1.stderr or "bad password" in data1.stderr:
+                        return jsonify({"status": "failed", "message": "Incorrect password for the artifact!"})
                     failed_servers.append({"server": server, "step": 2, "stderr": data1.stderr.strip()})
                     continue
 
