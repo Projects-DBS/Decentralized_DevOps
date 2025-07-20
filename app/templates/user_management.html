@@ -125,9 +125,9 @@
             <label>Contact</label>
             <input type="tel" name="contact" required>
             <label>Password</label>
-            <input type="password" name="password" required minlength="6">
+            <input type="password" name="password" required minlength="8">
             <label>Confirm Password</label>
-            <input type="password" name="confirm_password" required minlength="6">
+            <input type="password" name="confirm_password" required minlength="8">
             <label>Operations</label>
             <div class="checkbox-group" id="operations"></div>
             <label>Page Access</label>
@@ -242,33 +242,95 @@ function showSection(section) {
 document.getElementById('regNav').onclick = function(){ showSection('registration'); };
 document.getElementById('removeNav').onclick = function(){ showSection('remove'); };
 
-// ----------- REGISTRATION SUBMIT -----------
+// ----------- REGISTRATION SUBMIT (VALIDATION) -----------
 document.getElementById('regForm').onsubmit = function(e){
     e.preventDefault();
     let f = e.target;
-    let pw = f.password.value, cpw = f.confirm_password.value;
     let msgDiv = document.getElementById('reg-message');
     msgDiv.textContent = '';
     msgDiv.className = '';
-    if(!pw || !cpw) { msgDiv.textContent = "Password fields cannot be empty."; msgDiv.className = "error"; return; }
-    if(pw.length < 6) { msgDiv.textContent = "Password should be at least 6 characters."; msgDiv.className = "error"; return; }
-    if(pw !== cpw) { msgDiv.textContent = "Passwords do not match."; msgDiv.className = "error"; return; }
+
+    // Username
+    if(!f.username.value || f.username.value.trim().length < 6) {
+        msgDiv.textContent = "Username must be at least 6 characters.";
+        msgDiv.className = "error";
+        f.username.focus(); return;
+    }
+    // First Name
+    if(!f.first_name.value || f.first_name.value.trim().length < 3) {
+        msgDiv.textContent = "First name must be at least 3 characters.";
+        msgDiv.className = "error";
+        f.first_name.focus(); return;
+    }
+    // Last Name
+    if(!f.last_name.value || f.last_name.value.trim().length < 3) {
+        msgDiv.textContent = "Last name must be at least 3 characters.";
+        msgDiv.className = "error";
+        f.last_name.focus(); return;
+    }
+    // Email
+    let emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if(!emailPattern.test(f.email.value.trim())) {
+        msgDiv.textContent = "Enter a valid email address.";
+        msgDiv.className = "error";
+        f.email.focus(); return;
+    }
+    // Contact (simple validation, adjust as needed)
+    let phonePattern = /^\d{10}$/;
+    if(!phonePattern.test(f.contact.value.trim())) {
+        msgDiv.textContent = "Contact must be a 10-digit number.";
+        msgDiv.className = "error";
+        f.contact.focus(); return;
+    }
+    // Password
+    let pw = f.password.value, cpw = f.confirm_password.value;
+    if(!pw || !cpw) {
+        msgDiv.textContent = "Password fields cannot be empty.";
+        msgDiv.className = "error";
+        f.password.focus(); return;
+    }
+    // Password strength: min 8, uppercase, lowercase, number
+    let strongPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+    if(!strongPattern.test(pw)) {
+        msgDiv.textContent = "Password must be at least 8 characters with uppercase, lowercase, and a number.";
+        msgDiv.className = "error";
+        f.password.focus(); return;
+    }
+    if(pw !== cpw) {
+        msgDiv.textContent = "Passwords do not match.";
+        msgDiv.className = "error";
+        f.confirm_password.focus(); return;
+    }
+    // At least one operation
+    let ops = f.querySelectorAll('input[name="operations"]:checked');
+    if(ops.length < 1) {
+        msgDiv.textContent = "Select at least one operation.";
+        msgDiv.className = "error";
+        return;
+    }
+    // At least one page access
+    let pags = f.querySelectorAll('input[name="page_access"]:checked');
+    if(pags.length < 1) {
+        msgDiv.textContent = "Select at least one page access.";
+        msgDiv.className = "error";
+        return;
+    }
+
+    // Prepare Data
     let data = {
-        username: f.username.value,
-        first_name: f.first_name.value,
-        last_name: f.last_name.value,
+        username: f.username.value.trim(),
+        first_name: f.first_name.value.trim(),
+        last_name: f.last_name.value.trim(),
         role: f.role.value,
         organization: f.organization.value,
-        email: f.email.value,
-        contact: f.contact.value,
+        email: f.email.value.trim(),
+        contact: f.contact.value.trim(),
         password: pw,
-        operations: [],
-        page_access: []
+        operations: Array.from(ops).map(x=>x.value),
+        page_access: Array.from(pags).map(x=>x.value)
     };
-    let ops = f.querySelectorAll('input[name="operations"]:checked');
-    for(let i=0;i<ops.length;i++){ data.operations.push(ops[i].value); }
-    let pags = f.querySelectorAll('input[name="page_access"]:checked');
-    for(let i=0;i<pags.length;i++){ data.page_access.push(pags[i].value); }
+
+    // Register (same as before)
     fetch('/register', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
@@ -280,27 +342,23 @@ document.getElementById('regForm').onsubmit = function(e){
             return response.json().then(resp => {
                 msgDiv.textContent = resp.message || "Registered!";
                 msgDiv.className = resp.success ? "success" : "error";
-                if(resp.success) f.reset();
-            });
-        } else if (type.includes("application/octet-stream") || type.includes("application/")) {
-            return response.blob().then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = data.username + '.pvt';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-                msgDiv.textContent = "Registration successful! Key downloaded.";
-                msgDiv.className = "success";
-                f.reset();
+                if(resp.success) {
+                    f.reset();
+                    // --- POPUP ---
+                    alert("User Registered Successfully!");
+                }
             });
         } else {
-            return response.text().then(txt => { msgDiv.textContent = "Unknown response: " + txt; msgDiv.className = "error"; });
+            return response.text().then(txt => { 
+                msgDiv.textContent = "Unknown response: " + txt; 
+                msgDiv.className = "error"; 
+            });
         }
     })
-    .catch(e => { msgDiv.textContent = "Registration failed: " + e.message; msgDiv.className = "error"; });
+    .catch(e => { 
+        msgDiv.textContent = "Registration failed: " + e.message; 
+        msgDiv.className = "error"; 
+    });
 }
 
 // ----------- REMOVE USER -----------

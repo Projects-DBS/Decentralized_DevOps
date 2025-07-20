@@ -111,9 +111,15 @@
       const version = document.getElementById('version').value;
       const zipPassword = document.getElementById('zip_password').value;
       const zipPassword2 = document.getElementById('zip_password2').value;
+
       if (!project || !tag || !version) return showError('All fields required!');
       if (!zipPassword || !zipPassword2) return showError('Enter password in both fields.');
       if (zipPassword !== zipPassword2) return showError('Passwords do not match.');
+      // Strong password validation: min 8 chars, uppercase, lowercase, number, special char
+      let strongPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+      if (!strongPattern.test(zipPassword)) {
+        return showError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
+      }
 
       const selected = getSelectedProjectEntry(project, tag, version);
       if (!selected) return showError('Invalid selection.');
@@ -139,4 +145,3 @@
   </script>
 </body>
 </html>
-
