@@ -67,7 +67,7 @@
     <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
         <div class="bg-white p-6 rounded shadow text-center">
             <div class="loader mb-3"></div>
-            <span class="text-lg font-medium text-gray-800">Deploying, please wait...</span>
+            <span id="loadingText" class="text-lg font-medium text-gray-800">Deploying, please wait...</span>
         </div>
     </div>
     <!-- Loader Animation Style -->
@@ -207,16 +207,25 @@
             }
         }
 
-        // Decommission service
+        // Decommission service (with loading overlay and text update)
         async function decommissionService() {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingText = document.getElementById('loadingText');
+            loadingText.textContent = "Decommissioning, please wait...";
+            loadingOverlay.classList.remove('hidden');
+
             const tag = document.getElementById('tag').value;
             const serverPassword = document.getElementById('serverPassword').value;
 
             if (!tag) {
+                loadingOverlay.classList.add('hidden');
+                loadingText.textContent = "Deploying, please wait...";
                 alert('Please select a tag.');
                 return;
             }
             if (!serverPassword) {
+                loadingOverlay.classList.add('hidden');
+                loadingText.textContent = "Deploying, please wait...";
                 alert('Please enter the server password.');
                 return;
             }
@@ -228,6 +237,8 @@
                     body: JSON.stringify({ tag, ips: serverIps })
                 });
                 if (response.redirected || response.status === 302) {
+                    loadingOverlay.classList.add('hidden');
+                    loadingText.textContent = "Deploying, please wait...";
                     alert('Session invalid. Please log in.');
                     window.location.href = '/login';
                     return;
@@ -236,6 +247,8 @@
                 const unavailableIps = Object.keys(data).filter(ip => data[ip] !== 'Available');
 
                 if (unavailableIps.length === 0) {
+                    loadingOverlay.classList.add('hidden');
+                    loadingText.textContent = "Deploying, please wait...";
                     alert('No servers to decommission.');
                     return;
                 }
@@ -250,6 +263,8 @@
                     })
                 });
                 if (decommissionResponse.redirected || decommissionResponse.status === 302) {
+                    loadingOverlay.classList.add('hidden');
+                    loadingText.textContent = "Deploying, please wait...";
                     alert('Session invalid. Please log in.');
                     window.location.href = '/login';
                     return;
@@ -265,12 +280,17 @@
             } catch (error) {
                 console.error('Error decommissioning:', error);
                 alert('Decommission failed: ' + error.message);
+            } finally {
+                loadingOverlay.classList.add('hidden');
+                loadingText.textContent = "Deploying, please wait...";
             }
         }
 
-        // Deploy to servers (with loading overlay)
+        // Deploy to servers (with loading overlay and text update)
         async function deploy() {
             const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingText = document.getElementById('loadingText');
+            loadingText.textContent = "Deploying, please wait...";
             loadingOverlay.classList.remove('hidden');
 
             const artifactPassword = document.getElementById('artifactPassword').value;
