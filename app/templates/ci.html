@@ -5,18 +5,20 @@
   <title>CI Trigger</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f7f7f7; }
-    .container { max-width: 400px; margin: 50px auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 12px #ccc; }
-    label { display: block; margin-top: 15px; }
-    select, input, button { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #bbb; }
-    button { background: #3477f5; color: #fff; border: none; font-size: 16px; cursor: pointer; }
-    .error { color: #b00; }
-    .flash { color: green; }
+    .container { max-width: 440px; margin: 50px auto; background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 4px 12px #ccc; }
+    label { display: block; margin-top: 16px; font-weight: 500; }
+    select, input, button { width: 100%; padding: 9px; margin-top: 6px; margin-bottom: 12px; border-radius: 7px; border: 1px solid #bbb; }
+    button { background: #3477f5; color: #fff; border: none; font-size: 16px; cursor: pointer; font-weight: 600;}
+    button:hover { background: #2657b5;}
+    .error { color: #b00; margin-top: 10px; font-weight: 500;}
+    .flash { color: #008e3a; margin-top: 10px; font-weight: 500;}
+    .pw-hint { font-size: 13px; color: #888; margin-top: -10px; margin-bottom: 10px;}
   </style>
 </head>
 <body>
   <div class="container">
     <h2>CI Trigger</h2>
-    <form id="ciForm">
+    <form id="ciForm" autocomplete="off">
       <label for="project">Project</label>
       <select id="project" required>
         <option value="">Select Project</option>
@@ -30,11 +32,21 @@
         <option value="">Select Version</option>
       </select>
 
-      <!-- Password section -->
-      <label for="zip_password">Zip Password</label>
-      <input type="password" id="zip_password" required>
-      <label for="zip_password2">Confirm Password</label>
-      <input type="password" id="zip_password2" required>
+      <!-- Project zip password section -->
+      <label for="pzip_password">Project Zip Password</label>
+      <input type="password" id="pzip_password" required placeholder="Password to decrypt project zip">
+      <label for="pzip_password2">Confirm Project Zip Password</label>
+      <input type="password" id="pzip_password2" required placeholder="Confirm project zip password">
+
+      <!-- Build zip password section -->
+      <label for="zip_password">Build Zip Password</label>
+      <input type="password" id="zip_password" required placeholder="Password to encrypt build zip">
+      <label for="zip_password2">Confirm Build Zip Password</label>
+      <input type="password" id="zip_password2" required placeholder="Confirm build zip password">
+
+      <div class="pw-hint">
+        Passwords must be at least 8 characters and include uppercase, lowercase, a number, and a special character.
+      </div>
 
       <button type="submit">Trigger CI</button>
     </form>
@@ -109,16 +121,29 @@
       const project = document.getElementById('project').value;
       const tag = document.getElementById('tag').value;
       const version = document.getElementById('version').value;
+      const pzipPassword = document.getElementById('pzip_password').value;
+      const pzipPassword2 = document.getElementById('pzip_password2').value;
       const zipPassword = document.getElementById('zip_password').value;
       const zipPassword2 = document.getElementById('zip_password2').value;
 
       if (!project || !tag || !version) return showError('All fields required!');
-      if (!zipPassword || !zipPassword2) return showError('Enter password in both fields.');
-      if (zipPassword !== zipPassword2) return showError('Passwords do not match.');
+      if (!pzipPassword || !pzipPassword2 || !zipPassword || !zipPassword2)
+        return showError('Enter all passwords and confirmations.');
+      if (pzipPassword !== pzipPassword2)
+        return showError('Project zip passwords do not match.');
+      if (zipPassword !== zipPassword2)
+        return showError('Build zip passwords do not match.');
+      // Optionally enforce that build zip password is not the same as project zip password
+      if (pzipPassword === zipPassword)
+        return showError('Project zip password and build zip password should be different.');
+
       // Strong password validation: min 8 chars, uppercase, lowercase, number, special char
       let strongPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+      if (!strongPattern.test(pzipPassword)) {
+        return showError('Project zip password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
+      }
       if (!strongPattern.test(zipPassword)) {
-        return showError('Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
+        return showError('Build zip password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
       }
 
       const selected = getSelectedProjectEntry(project, tag, version);
@@ -131,7 +156,8 @@
         body: JSON.stringify({
           cid: selected.cid,
           tag: selected.tag,
-          zip_password: zipPassword,
+          zip_password: pzipPassword,           // For decrypting the original zip
+          build_zip_password: zipPassword,      // For encrypting the build
           project_name: project
         })
       })

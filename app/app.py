@@ -729,7 +729,6 @@ def available_servers():
         return {"servers": [], "error": str(e)}, 500
 
 
-
 @app.route('/download_project', methods=['POST'])
 def download_project():
     status = check_session(session, "pullfrom_ipfs")
@@ -740,31 +739,38 @@ def download_project():
         data = request.get_json()
         cid = data['cid']
         project_name = data['project_name']
+        zip_password = data.get('zip_password')
+
+        if not zip_password:
+            return jsonify({'error': 'Password required'}), 400
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            out_path = os.path.join(tmpdir, "output")
-            # Download from IPFS; will create a file or folder
-            subprocess.run(['ipfs', 'get', cid, '-o', out_path], check=True)
+            enc_path = os.path.join(tmpdir, f"{project_name}.zip.enc")
+            dec_path = os.path.join(tmpdir, f"{project_name}.zip")
 
-            # Check if it's a file or folder
-            if os.path.isdir(out_path):
-                # Zip the directory
-                zip_path = os.path.join(tmpdir, f"{project_name}.zip")
-                shutil.make_archive(zip_path[:-4], 'zip', out_path)
-                return send_file(
-                    zip_path,
-                    as_attachment=True,
-                    download_name=f"{project_name}.zip"
-                )
-            elif os.path.isfile(out_path):
-                # If the file is already a zip, just send
-                return send_file(
-                    out_path,
-                    as_attachment=True,
-                    download_name=f"{project_name}.zip"
-                )
-            else:
-                raise Exception("Downloaded content not found or unrecognized.")
+            # Download encrypted file from IPFS
+            subprocess.run(['ipfs', 'get', cid, '-o', enc_path], check=True)
+
+            # Decrypt file using password
+            dec_cmd = [
+                'openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-in', enc_path,
+                '-out', dec_path, '-pass', f'pass:{zip_password}'
+            ]
+            dec_result = subprocess.run(dec_cmd, capture_output=True, text=True)
+
+            # Check if decryption failed (wrong password or corrupted file)
+            if dec_result.returncode != 0:
+                if "bad decrypt" in dec_result.stderr.lower() or "error" in dec_result.stderr.lower():
+                    return jsonify({'error': 'wrong password'}), 403
+                else:
+                    return jsonify({'error': dec_result.stderr.strip() or "Decryption failed"}), 500
+
+            # On success, send the decrypted zip
+            return send_file(
+                dec_path,
+                as_attachment=True,
+                download_name=f"{project_name}.zip"
+            )
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -816,6 +822,14 @@ def get_all_projects():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
+import os
+import subprocess
+import tempfile
+import zipfile
+import json
+from datetime import datetime, timezone
+from flask import request, jsonify, session, flash, redirect, url_for
+
 
 @app.route('/trigger-build-ci', methods=['POST'])
 def trigger_ci_build():
@@ -827,110 +841,134 @@ def trigger_ci_build():
     data = request.get_json()
     cid = data.get('cid')
     tag = data.get('tag')
-    zip_password = data.get("zip_password")
+    project_zip_password = data.get("zip_password")          # password for project zip decryption
+    build_zip_password = data.get("build_zip_password")      # password to encrypt build artifact
     project_name = data.get("project_name")
 
-    # Step 1: Download from IPFS
-    cmd = f"cd /tmp/ && ipfs get {cid}"
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    if result.returncode != 0:
-        return jsonify({"success": False, "message": "Unable to retrieve the requested project from CID for build."})
+    if not build_zip_password:
+        return jsonify({"success": False, "message": "Build zip password is required."})
 
-    # Step 2: Find .py file and zip
-    zipped = False
-    for root, dirs, files in os.walk(f'/tmp/{cid}'):
-        for file in files:
-            if file.lower().endswith(".py"):
-                subprocess.run(['zip', '-r', f'{cid}.zip', '.'], cwd=root)
-                zipped = True
-                break
-        if zipped:
-            break
-    if not zipped:
-        return jsonify({"success": False, "message": "No .py file found in project, nothing to zip."})
+    with tempfile.TemporaryDirectory() as tmpdir:
+        enc_zip_path = os.path.join(tmpdir, f"{cid}.zip.enc")
+        dec_zip_path = os.path.join(tmpdir, f"{cid}.zip")
+        extract_dir = os.path.join(tmpdir, "extracted")
 
-    zip_path = os.path.join(root, f"{cid}.zip")
-    enc_path = os.path.join(root, f"{cid}.zip.enc")
+        # Step 1: Download encrypted .zip.enc from IPFS
+        cmd = f'ipfs get {cid} -o "{enc_zip_path}"'
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to retrieve the requested project from CID for build."})
 
-    # Step 3: Encrypt the zip
-    enc = f'openssl enc -aes-256-cbc -pbkdf2 -salt -in "{zip_path}" -out "{enc_path}" -pass pass:{zip_password}'
-    result = subprocess.run(enc, shell=True, capture_output=True, text=True)
-    if result.returncode != 0:
-        return jsonify({"success": False, "message": "Encrypting the build failed!"})
+        # Step 2: Decrypt .zip.enc to .zip using project_zip_password
+        dec_cmd = f'openssl enc -d -aes-256-cbc -pbkdf2 -in "{enc_zip_path}" -out "{dec_zip_path}" -pass pass:{project_zip_password}'
+        dec_result = subprocess.run(dec_cmd, shell=True, capture_output=True, text=True)
+        if dec_result.returncode != 0:
+            return jsonify({"success": False, "message": "Decryption failed. Wrong project password or corrupt file."})
 
-    # Step 4: Push encrypted zip to IPFS Cluster
-    cmd = f'ipfs-cluster-ctl add -q "{enc_path}"'
-    ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    if ipfs_result.returncode != 0:
-        return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
-    new_cid = ipfs_result.stdout.strip()
-
-    # Step 5: Get current build records from IPNS
-    cmd = f'ipfs name resolve --nocache -r {ipns_key_project_builds}'
-    resolve_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    if resolve_result.returncode != 0:
-        return jsonify({"success": False, "message": "Unable to resolve the IPNS Key for latest CID."})
-    current_builds_cid = resolve_result.stdout.strip()
-
-    cat_cmd = f'ipfs cat {current_builds_cid}'
-    cat_result = subprocess.run(cat_cmd, shell=True, capture_output=True, text=True)
-    if cat_result.returncode != 0:
-        return jsonify({"success": False, "message": "Unable to read the build records from IPNS and IPFS."})
-
-    # Step 6: Prepare new build entry, auto-increment version
-    try:
-        builds_data = json.loads(cat_result.stdout.strip().replace('\n', ''))
-    except Exception:
-        builds_data = {"project_builds": []}
-    builds_list = builds_data.get("project_builds", [])
-    matching_builds = [b for b in builds_list if b.get("project_name") == project_name]
-    if matching_builds:
+        # Step 3: Extract the zip to a directory
+        os.makedirs(extract_dir, exist_ok=True)
         try:
-            max_version = max(int(b.get("version", 0)) for b in matching_builds)
-            version = str(max_version + 1)
+            with zipfile.ZipFile(dec_zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+        except Exception as e:
+            return jsonify({"success": False, "message": f"Failed to extract zip: {e}"})
+
+        # Step 4: Find .py file and zip the containing folder (or all extracted files)
+        zipped = False
+        for root, dirs, files in os.walk(extract_dir):
+            for file in files:
+                if file.lower().endswith(".py"):
+                    subprocess.run(['zip', '-r', f'{cid}_build.zip', '.'], cwd=root)
+                    zipped = True
+                    break
+            if zipped:
+                break
+        if not zipped:
+            return jsonify({"success": False, "message": "No .py file found in project, nothing to zip."})
+
+        zip_path = os.path.join(root, f"{cid}_build.zip")
+        enc_build_path = os.path.join(root, f"{cid}_build.zip.enc")
+
+        # Step 5: Encrypt the build zip with the build password
+        enc = f'openssl enc -aes-256-cbc -pbkdf2 -salt -in "{zip_path}" -out "{enc_build_path}" -pass pass:{build_zip_password}'
+        result = subprocess.run(enc, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            return jsonify({"success": False, "message": "Encrypting the build failed!"})
+
+        # Step 6: Push encrypted build zip to IPFS Cluster
+        cmd = f'ipfs-cluster-ctl add -q "{enc_build_path}"'
+        ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if ipfs_result.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
+        new_cid = ipfs_result.stdout.strip()
+
+        # Step 7: Get current build records from IPNS
+        cmd = f'ipfs name resolve --nocache -r {ipns_key_project_builds}'
+        resolve_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if resolve_result.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to resolve the IPNS Key for latest CID."})
+        current_builds_cid = resolve_result.stdout.strip()
+
+        cat_cmd = f'ipfs cat {current_builds_cid}'
+        cat_result = subprocess.run(cat_cmd, shell=True, capture_output=True, text=True)
+        if cat_result.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to read the build records from IPNS and IPFS."})
+
+        # Step 8: Prepare new build entry, auto-increment version
+        try:
+            builds_data = json.loads(cat_result.stdout.strip().replace('\n', ''))
         except Exception:
+            builds_data = {"project_builds": []}
+        builds_list = builds_data.get("project_builds", [])
+        matching_builds = [b for b in builds_list if b.get("project_name") == project_name]
+        if matching_builds:
+            try:
+                max_version = max(int(b.get("version", 0)) for b in matching_builds)
+                version = str(max_version + 1)
+            except Exception:
+                version = "1"
+        else:
             version = "1"
-    else:
-        version = "1"
 
-    new_entry = {
-        "project_name": project_name,
-        "build_cid": new_cid,
-        "built_by": session.get("username"),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": version,
-        "tag": tag
-    }
+        new_entry = {
+            "project_name": project_name,
+            "build_cid": new_cid,
+            "built_by": session.get("username"),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "version": version,
+            "tag": tag
+        }
 
-    if "project_builds" not in builds_data or not isinstance(builds_data["project_builds"], list):
-        builds_data["project_builds"] = []
-    builds_data["project_builds"].append(new_entry)
+        if "project_builds" not in builds_data or not isinstance(builds_data["project_builds"], list):
+            builds_data["project_builds"] = []
+        builds_data["project_builds"].append(new_entry)
 
-    # Step 7: Add updated build records to IPFS Cluster
-    with tempfile.NamedTemporaryFile("w", delete=False) as tmpf:
-        json.dump(builds_data, tmpf, indent=2)
-        tmpf_path = tmpf.name
+        # Step 9: Add updated build records to IPFS Cluster
+        with tempfile.NamedTemporaryFile("w", delete=False) as tmpf:
+            json.dump(builds_data, tmpf, indent=2)
+            tmpf_path = tmpf.name
 
-    cmd = f'ipfs-cluster-ctl add -q "{tmpf_path}"'
-    ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    if ipfs_result.returncode != 0:
+        cmd = f'ipfs-cluster-ctl add -q "{tmpf_path}"'
+        ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if ipfs_result.returncode != 0:
+            os.remove(tmpf_path)
+            return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
+
+        updated_cid = ipfs_result.stdout.strip()
+
+        # Step 10: Publish updated build records to IPNS
+        cmd = f'ipfs name publish --key=project_builds {updated_cid}'
+        publish_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         os.remove(tmpf_path)
-        return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
+        if publish_result.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to publish the new build info to IPNS."})
 
-    updated_cid = ipfs_result.stdout.strip()
+        return jsonify({
+            "success": True,
+            "message": f"Project build for tag '{tag}' completed successfully.",
+            "build_cid": new_cid
+        })
 
-    # Step 8: Publish updated build records to IPNS
-    cmd = f'ipfs name publish --key=project_builds {updated_cid}'
-    publish_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    os.remove(tmpf_path)
-    if publish_result.returncode != 0:
-        return jsonify({"success": False, "message": "Unable to publish the new build info to IPNS."})
-
-    return jsonify({
-        "success": True,
-        "message": f"Project build for tag '{tag}' completed successfully.",
-        "build_cid": new_cid
-    })
     
 # @app.route('/trigger-build-ci', methods=['POST'])
 # def trigger_ci_build():
@@ -1234,8 +1272,6 @@ def register():
     
 
 
-    
-
 
 @app.route('/pushto_ipfs', methods=['POST'])
 def pushto_ipfs():
@@ -1249,29 +1285,30 @@ def pushto_ipfs():
         return jsonify(success=False, error="Session invalid, please re-login."), 401
 
     f = request.files.get('zipfile')
+    zip_password = request.form.get('zip_password')  # Or use request.json if you send as JSON
+
     if not f or not f.filename.lower().endswith('.zip'):
         return jsonify(success=False, error='Please upload a .zip'), 400
 
-    # Save zip file
+    if not zip_password:
+        return jsonify(success=False, error="Password required to encrypt the file."), 400
+
+    # Save uploaded zip file
     filename = secure_filename(f.filename)
-    project_name, _ = os.path.splitext(filename)
     zip_path = os.path.join(TEMP_DIR, filename)
     f.save(zip_path)
 
-    # Extract to unique subdirectory
-    extract_dir = os.path.join(TEMP_DIR, project_name)
-    if os.path.exists(extract_dir):
-        shutil.rmtree(extract_dir)
-    os.makedirs(extract_dir, exist_ok=True)
-
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(extract_dir)
+    # Encrypt the zip file
+    enc_zip_path = zip_path + ".enc"
+    enc_cmd = f'openssl enc -aes-256-cbc -pbkdf2 -salt -in "{zip_path}" -out "{enc_zip_path}" -pass pass:{zip_password}'
+    enc_res = subprocess.run(enc_cmd, shell=True, capture_output=True, text=True)
+    if enc_res.returncode != 0:
+        return jsonify(success=False, error="Encryption failed: " + enc_res.stderr.strip()), 500
 
     try:
-        # Add the extracted folder (not the zip file) to IPFS Cluster
-        cmd = f"ipfs-cluster-ctl add -r {extract_dir} | tail -n1 | cut -d' ' -f2"
+        # Push the encrypted zip to IPFS Cluster
+        cmd = f'ipfs-cluster-ctl add "{enc_zip_path}" | tail -n1 | cut -d" " -f2'
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-
         if res.returncode != 0:
             return jsonify(success=False, error=res.stderr.strip()), 500
 
@@ -1280,10 +1317,12 @@ def pushto_ipfs():
         print(f"Hello, Part3 done: {new_cid}")
         print("Invoking the update method")
 
+        # project_name is taken from the zip filename
+        project_name, _ = os.path.splitext(filename)
         status = update_project_record(new_cid, None, ipns_key_projects, project_name, access_info)
 
         if status == True:
-            return jsonify(success=True, cid="Successfully pushed to IPFS Cluster.")
+            return jsonify(success=True, cid=new_cid)
         else:
             return jsonify(success=False, error="Failed to push the project to the repo."), 500
 
@@ -1293,12 +1332,12 @@ def pushto_ipfs():
         return jsonify(success=False, error=str(e)), 500
     finally:
         # Clean up files
-        try:
-            os.remove(zip_path)
-            shutil.rmtree(extract_dir)
-        except OSError:
-            pass
-
+        for path in [zip_path, enc_zip_path]:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
 
 
 
