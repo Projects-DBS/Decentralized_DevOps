@@ -165,7 +165,7 @@ sudo -u "${APP_USERNAME}" bash -c '
 
 sudo -u "${APP_USERNAME}" bash -c '
   tmpfile=$(mktemp)
-  echo "{\"logs\": []}" > "$tmpfile"
+  echo "{}" > "$tmpfile"
 
   cid=$(ipfs-cluster-ctl add -q "$tmpfile")
 

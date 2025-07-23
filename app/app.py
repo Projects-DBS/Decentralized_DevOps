@@ -7,12 +7,12 @@ import subprocess
 import tempfile
 from time import sleep
 import zipfile
-from flask import Flask, json, jsonify, render_template, request, redirect, send_file, url_for, flash, session
+from flask import Flask, json, jsonify, make_response, render_template, request, redirect, send_file, url_for, flash, session
 from services.ipfs import ipfs_connect, remove_user_info, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
 from services.crypto import decrypt_openssl
 from services.session import check_session
 from werkzeug.utils import secure_filename
-
+from services.logs import get_logs, immutable_application_log
 
 ports = {
     "dev": 1001,
@@ -48,31 +48,31 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'     # Or 'Strict' for more strict 
 TEMP_DIR = '/tmp'
 IPFS_URL = "http://127.0.0.1:5001"
 
-# def check_session(page):
-#     try:
-#         username = session.get("username")
-#         role = session.get("role")
-#         expiry = session.get("expiry")
-#         page_access = session.get("page_access", [])
+def get_client_ip():
+    x_forwarded_for = request.headers.get('X-Forwarded-For')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.remote_addr
+    return ip
 
-#         if not username or not role or not expiry:
-#             return "Unauthorized access!"
 
-#         if datetime.now(timezone.utc).timestamp() > expiry:
-#             session.clear()
-#             return "Session expired. Please log in again."
 
-#         if role not in ["admin", "developer", "qa"]:
-#             session.clear()
-#             return "Unauthorized access."
 
-#         if page not in page_access:
-#             return "Unauthorized page access."
+@app.route('/get_logs', methods=['GET'])
+def get_all_logs():
+    status = check_session(session, "logs")
+    if status != True:
+        flash(status)
+        return redirect(url_for("login"))
+    logs = get_logs(ipns_key_logs)   # {ip: [log_dicts]}
+    # Render template, then set no-cache headers
+    response = make_response(render_template("logs_table.html", logs=logs))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
-#         return True
-
-#     except Exception:
-#         return "Unknown error occurred!"
 
 @app.route('/list_all_users', methods = ['GET'])
 def list_all_users_info():
@@ -118,6 +118,9 @@ def remove_user():
         if username == "admin" or username == "Admin":
             return jsonify({"success": False, "message": "You cannot remove admin from the Access."})
         success, message = remove_user_info(ipns_key_access_control, username)
+        immutable_application_log(session, "remove_user", "user-management", f"User removed.",ipns_key_logs)
+        
+            
         return jsonify({"success": success, "message": message})
     except:
         success = False
@@ -133,10 +136,14 @@ def cicd_page():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
+    immutable_application_log(session, "view_pipeline_operations", "ci-cd-operations", "View Pipeline operation visited.",ipns_key_logs)
+    
     return render_template("cicd_operations.html")
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    session.clear()
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -164,7 +171,7 @@ def login():
                     return redirect(url_for("login"))
                 access_control_cid = decrypt_openssl(user_access, password).decode()
                 access_info = get_document_ipfs_cid(access_control_cid, IPFS_URL)
-
+                
                 session.permanent = True
                 session["username"] = access_info.get("username")
                 session["role"] = access_info.get("role")
@@ -173,7 +180,10 @@ def login():
                 session["page_access"] = access_info.get("pages", [])
                 session["access_info"] = access_info
                 session["organization"] = access_info.get("organization", []) # <--- Store access_info in session
-
+                session["start_time"] = datetime.now(timezone.utc).isoformat()
+                immutable_application_log(session, "login", "login_page", "Login successfull",ipns_key_logs)
+                
+                    
                 if access_info.get("role") == "admin":
                     return redirect(url_for('admin_dashboard'))
                 elif access_info.get("role") == "developer":
@@ -243,6 +253,8 @@ def admin_dashboard():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
+    immutable_application_log(session, "view_admin_page", "admin_dashboard", "Login Success",ipns_key_logs)
+
     return render_template("admin_dashboard.html", username=session.get("username"))
 
 @app.route("/developer-dashboard", methods=["GET", "POST"])
@@ -251,6 +263,8 @@ def developer_dashboard():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
+    immutable_application_log(session, "view_developer_page", "developer_dashboard", "Login Success",ipns_key_logs)
+
     return render_template("developer_dashboard.html", username=session.get("username"))
 
 @app.route("/qa-dashboard", methods=["GET", "POST"])
@@ -259,6 +273,8 @@ def qa_dashboard():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
+    immutable_application_log(session, "view_qa_page", "qa_dashboard", "Login Success",ipns_key_logs)
+    
     return render_template("qa_dashboard.html", username=session.get("username"))
 
 @app.route("/ipfs-repo-operation", methods=["GET", "POST"])
@@ -267,6 +283,8 @@ def push_pull():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
+    immutable_application_log(session, "view_ipfs_repo_operation", "ipfs-repo-operation", "IPFS Operation Page listed.",ipns_key_logs)
+    
     return render_template("ipfs-repo-operation.html")
 
 @app.route('/pushto_ipfs', methods=['GET'])
@@ -275,6 +293,8 @@ def push_to_ipfs():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
+    immutable_application_log(session, "view_push_to_ipfs", "pushto_ipfs", "Push to IPFS page loaded.",ipns_key_logs)
+    
     return render_template("pushto_ipfs.html")
 
 @app.route('/pullfrom_ipfs', methods=['GET','POST'])
@@ -283,6 +303,8 @@ def pull_from_ipfs():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
+    immutable_application_log(session, "view_pull_project", "pull_from_ipfs", "Project List Visited.",ipns_key_logs)
+    
     return render_template("pullfrom_ipfs.html")
 
 @app.route('/get_projects', methods=['POST'])
@@ -321,51 +343,11 @@ def build_info():
     json_result = json.loads(result1)
     return jsonify(json_result), 200
 
-# @app.route('/decommission', methods=['GET'])
-# def decommission_page():
-#     status = check_session(session, "decommission")
-#     if status != True:
-#         return jsonify({"status": "error", "message": str(status)}), 401
-#     return render_template('decommission.html')
 
-# @app.route('/decommission', methods=['POST'])
-# def decommission():
-#     status = check_session(session, "decommission")
-#     if status != True:
-#         return jsonify({"status": "error", "message": str(status)}), 401
-
-#     try:
-#         data = request.get_json()
-#         server_list = data.get('server_list', [])
-#         deployment_server_password = data.get('deployment_server_password')
-#         tag = data.get('tag')
-#         port = ports.get(tag)
-
-#         if not all([server_list, deployment_server_password, tag, port]):
-#             return jsonify({"status": "error", "message": "Missing required parameters"}), 400
-
-#         for server in server_list:
-#             # Stop the Gunicorn process
-#             command = (
-#                 f'pid=$(lsof -t -i:{port}) && '
-#                 f'if [ -n "$pid" ]; then kill -9 $pid; fi'
-#             )
-#             cmd = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command}"'
-#             data = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-#             if data.returncode != 0:
-#                 return jsonify({"status": "error", "message": f"Failed to stop application on server {server}: {data.stderr.strip()}"}), 500
-
-#             # Remove the application directory
-#             command = f'rm -rf /home/guest/www/{tag}'
-#             cmd = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command}"'
-#             data = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-#             if data.returncode != 0:
-#                 return jsonify({"status": "error", "message": f"Failed to remove application directory on server {server}: {data.stderr.strip()}"}), 500
-
-#         return jsonify({"status": "success", "message": "Decommissioning completed successfully!"})
-
-#     except Exception as e:
-#         return jsonify({"status": "error", "message": f"Decommissioning failed: {str(e)}"}), 500
+@app.route('/logout')
+def logout():
+    session.clear()  # This clears the entire session
+    return redirect(url_for('login'))  # Or wherever you want to go
 
 @app.route('/decommission', methods=['POST'])
 def decommission():
@@ -424,14 +406,21 @@ def decommission():
                 continue
 
         if len(success_servers) == len(server_list):
+            immutable_application_log(session, "decommission", "trigger-cd", f"Decommission done for all server.",ipns_key_logs)
+            
             return jsonify({"status": "success", "message": "Decommission done!"})
         elif len(success_servers) == 0:
+            immutable_application_log(session, "decommission", "trigger-cd", f"Decommission failed for all server.",ipns_key_logs)
+            
             return jsonify({
                 "status": "error",
                 "message": "Decommission failed on all servers.",
                 "failed_servers": failed_servers
             })
         else:
+            immutable_application_log(session, "decommission", "trigger-cd", f"Decommission failed for some server.",ipns_key_logs)
+            
+                
             return jsonify({
                 "status": "partial_failure",
                 "failed_servers": failed_servers,
@@ -535,14 +524,23 @@ def deploy():
                 continue
 
         if len(success_servers) == len(server_list):
+            immutable_application_log(session, "trigger_cd", "deploy", f"Deployment done for all server.",ipns_key_logs)
+            
+                
             return jsonify({"status": "success", "message": "Deployment done!"})
         elif len(success_servers) == 0:
+            immutable_application_log(session, "trigger_cd", "deploy", f"Deployment failed for all server.",ipns_key_logs)
+            
+                
             return jsonify({
                 "status": "error",
                 "message": "Deployment failed on all servers.",
                 "failed_servers": failed_servers
             })
         else:
+            immutable_application_log(session, "trigger_cd", "deploy", f"Deployment failed for some server.",ipns_key_logs)
+            
+                
             return jsonify({
                 "status": "partial_failure",
                 "failed_servers": failed_servers,
@@ -766,6 +764,9 @@ def download_project():
                     return jsonify({'error': dec_result.stderr.strip() or "Decryption failed"}), 500
 
             # On success, send the decrypted zip
+            immutable_application_log(session, "download_project", "pull_from_ipfs", "Downloading the Project.",ipns_key_logs)
+            
+                
             return send_file(
                 dec_path,
                 as_attachment=True,
@@ -963,6 +964,9 @@ def trigger_ci_build():
         if publish_result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to publish the new build info to IPNS."})
 
+        immutable_application_log(session, "trigger_ci", "trigger-ci", "Build trigger",ipns_key_logs)
+        
+            
         return jsonify({
             "success": True,
             "message": f"Project build for tag '{tag}' completed successfully.",
@@ -1260,6 +1264,9 @@ def register():
         new_ipfs_output = subprocess.run(cmd_publish, shell=True, capture_output=True, text=True)
         if new_ipfs_output.returncode != 0:
             return jsonify({"success": False, "message": "Unable to register the user. IPNS publish error. Contact Amdin."}), 500
+        immutable_application_log(session, "user_registration", "user-management", f"New user was registered.",ipns_key_logs)
+        
+            
         return jsonify({"success": True, "message": "Registration complete."}), 200
         
     except:
@@ -1283,6 +1290,9 @@ def pushto_ipfs():
     access_info = session.get("access_info")
     if not access_info:
         return jsonify(success=False, error="Session invalid, please re-login."), 401
+    
+    immutable_application_log(session, "push_project", "pushto_ipfs", "Push Project Inititated",ipns_key_logs)
+    
 
     f = request.files.get('zipfile')
     zip_password = request.form.get('zip_password')  # Or use request.json if you send as JSON
@@ -1322,6 +1332,9 @@ def pushto_ipfs():
         status = update_project_record(new_cid, None, ipns_key_projects, project_name, access_info)
 
         if status == True:
+            immutable_application_log(session, "push_project", "pushto_ipfs", "Project Pushed",ipns_key_logs)
+            
+                
             return jsonify(success=True, cid=new_cid)
         else:
             return jsonify(success=False, error="Failed to push the project to the repo."), 500
