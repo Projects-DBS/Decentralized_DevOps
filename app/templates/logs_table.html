@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server Logs Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0;}
+        .container { max-width: 900px; margin: 40px auto; background: #fff; padding: 32px; border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.08);}
+        h2 { color: #333; font-weight: 600; margin-bottom: 18px;}
+        select { padding: 9px 12px; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 24px; font-size: 16px;}
+        table { width: 100%; border-collapse: collapse; background: #fafbfc;}
+        th, td { padding: 9px 12px; border-bottom: 1px solid #e0e0e0;}
+        th { background: #3477f5; color: #fff; font-weight: 600;}
+        tr:hover { background: #eef2fb;}
+        @media (max-width: 700px) {
+            .container { padding: 10px; }
+            table, th, td { font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Server Logs Viewer</h2>
+        <label for="ipSelect"><b>Select Server IP:</b></label>
+        <select id="ipSelect"></select>
+        <div style="overflow-x:auto;">
+            <table id="logsTable">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Session Started</th>
+                        <th>Server IP</th>
+                        <th>Role</th>
+                        <th>Operation</th>
+                        <th>Page</th>
+                        <th>Message</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Rows will go here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+<script>
+    // logs always comes from Flask as a dict, safe with |tojson|safe
+    const logs = JSON.parse('{{ logs | tojson | safe }}');
+    const ipSelect = document.getElementById("ipSelect");
+    const logsTableBody = document.getElementById("logsTable").querySelector("tbody");
+
+    // Helper: Renders logs for a selected IP
+    function renderTable(ip) {
+        logsTableBody.innerHTML = "";
+        if (!logs[ip] || logs[ip].length === 0) {
+            logsTableBody.innerHTML = "<tr><td colspan='8' style='text-align:center;'>No logs available.</td></tr>";
+            return;
+        }
+        logs[ip].forEach(entry => {
+            let row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${entry.username ?? ''}</td>
+                <td>${entry.session_started ?? ''}</td>
+                <td>${entry.server_ip ?? ''}</td>
+                <td>${entry.role ?? ''}</td>
+                <td>${entry.operation ?? ''}</td>
+                <td>${entry.page ?? ''}</td>
+                <td>${entry.message ?? ''}</td>
+                <td>${entry.timestamp ?? ''}</td>
+            `;
+            logsTableBody.appendChild(row);
+        });
+    }
+
+    // Fill dropdown with all IP addresses
+    const allIPs = Object.keys(logs);
+    if (allIPs.length > 0) {
+        allIPs.forEach(ip => {
+            let opt = document.createElement("option");
+            opt.value = ip;
+            opt.textContent = ip;
+            ipSelect.appendChild(opt);
+        });
+
+        // Show logs for the first IP on page load
+        renderTable(ipSelect.value = allIPs[0]);
+    } else {
+        // No logs at all: show message
+        logsTableBody.innerHTML = "<tr><td colspan='8' style='text-align:center;'>No logs available.</td></tr>";
+    }
+
+    // Update table when IP selection changes
+    ipSelect.addEventListener("change", function() {
+        renderTable(this.value);
+    });
+</script>
+</body>
+</html>

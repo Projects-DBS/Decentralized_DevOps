@@ -4,19 +4,41 @@
   <meta charset="UTF-8">
   <title>Pull from IPFS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Inter font for modern appearance -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:400,500,600&display=swap">
   <style>
-    body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0;}
+    body {
+      font-family: 'Inter', Arial, system-ui, sans-serif;
+      background: #f7f7f7;
+      margin: 0; padding: 0;
+      color: #222;
+      letter-spacing: 0.01em;
+    }
     .container {
-      max-width: 500px;
-      margin: 60px auto;
+      max-width: 540px;
+      margin: 64px auto;
       background: #fff;
-      padding: 30px 40px 40px 40px;
-      border-radius: 12px;
-      box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+      padding: 36px 44px 44px 44px;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.10);
       text-align: center;
     }
-    h2 { margin-bottom: 30px; color: #333; font-weight: 600;}
-    select, button {
+    h2 {
+      margin-bottom: 32px;
+      color: #222;
+      font-weight: 600;
+      font-size: 2rem;
+      letter-spacing: 0.01em;
+    }
+    label {
+      text-align: left;
+      display: block;
+      font-size: 1rem;
+      color: #353535;
+      font-weight: 500;
+      margin: 14px 0 2px 10%;
+    }
+    select, button, input[type="password"] {
       margin: 15px 0;
       padding: 10px 16px;
       border-radius: 8px;
@@ -28,19 +50,63 @@
       margin-left: auto;
       margin-right: auto;
     }
+    input[type="password"] {
+      margin-top: 0;
+      letter-spacing: 0.08em;
+    }
+    .password-hint {
+      font-size: 13px;
+      color: #888;
+      margin: 5px 0 0 10%;
+      text-align: left;
+    }
+    .error-msg {
+      color: #c00;
+      font-size: 14px;
+      font-weight: 500;
+      margin-top: 5px;
+      text-align: left;
+      margin-left: 10%;
+    }
     button {
       background: #3477f5;
       color: #fff;
       border: none;
-      font-size: 18px;
+      font-size: 19px;
+      padding: 14px 34px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: background 0.3s ease;
+      font-weight: 600;
+      transition: background 0.3s;
+      margin-top: 6px;
+      letter-spacing: 0.04em;
     }
     button:hover { background: #2657b5;}
-    .flash { margin-top: 20px; color: green; font-weight: 500; word-break: break-all;}
-    @media (max-width: 600px) {
-      .container { margin: 30px 20px; padding: 20px 25px 30px 25px;}
-      select, button { font-size: 15px; padding: 8px 12px;}
+    .flash {
+      margin-top: 24px;
+      color: #008e3a;
+      font-weight: 500;
+      word-break: break-all;
+      white-space: pre-line;
+      font-size: 1.1rem;
+      letter-spacing: 0.02em;
+    }
+    @media (max-width: 640px) {
+      .container {
+        margin: 30px 6px;
+        padding: 16px 7vw 20px 7vw;
+      }
+      h2 {
+        font-size: 1.35rem;
+      }
+      select, button, input[type="password"] {
+        font-size: 0.96rem;
+        padding: 8px 12px;
+      }
+      label {
+        font-size: 0.98rem;
+      }
+      .password-hint, .error-msg { font-size: 12px; }
     }
   </style>
 </head>
@@ -51,6 +117,14 @@
     <pre id="out" class="flash"></pre>
   </div>
   <script>
+    // Password validation function
+    function validatePassword(pw) {
+      if (!pw || pw.length < 8) return 'At least 8 characters required.';
+      if (!/[A-Za-z]/.test(pw)) return 'At least one letter required.';
+      if (!/[0-9]/.test(pw)) return 'At least one number required.';
+      return '';
+    }
+
     // On load, fetch projects and build dropdowns
     window.onload = function() {
       fetch('/get_projects', {method: 'POST'})
@@ -59,13 +133,13 @@
           let projects = data.projects || [];
           let main = document.getElementById('main-content');
           if (!projects.length) {
-            main.innerHTML = '<div class="flash">No project pushed yet.</div>';
+            main.innerHTML = '<div class="flash" style="color:#c00">No project pushed yet.</div>';
             return;
           }
           // Build unique lists
           let pnames = [...new Set(projects.map(p => p.project_name))];
           main.innerHTML =
-            `<form id="pullForm">
+            `<form id="pullForm" autocomplete="off">
               <label>Project:</label>
               <select id="project" name="project" required>
                 <option value="">Select Project</option>
@@ -79,11 +153,19 @@
               <select id="version" name="version" required>
                 <option value="">Select Version</option>
               </select>
+              <label for="zip_password">Decryption Password:</label>
+              <input type="password" id="zip_password" name="zip_password" placeholder="Enter password" required>
+              <div class="password-hint">
+                Password must be at least 8 characters, contain a letter and a number.
+              </div>
+              <div id="password-error" class="error-msg" style="display:none;"></div>
               <button type="submit">Download Project ZIP</button>
             </form>`;
           let proj = document.getElementById('project');
           let tag = document.getElementById('tag');
           let ver = document.getElementById('version');
+          let pass = document.getElementById('zip_password');
+          let pwError = document.getElementById('password-error');
           // Populate tags on project change
           proj.onchange = function() {
             let tags = projects.filter(p => p.project_name === proj.value)
@@ -106,28 +188,51 @@
           // On submit, download ZIP
           document.getElementById('pullForm').onsubmit = function(e) {
             e.preventDefault();
+            pwError.style.display = "none";
             let projectName = proj.value;
             let val = ver.value.split('|');
             let cid = val[0];
+            let zipPassword = pass.value;
             let out = document.getElementById('out');
+            // Password validation
+            let errorMsg = validatePassword(zipPassword);
+            if (errorMsg) {
+              pwError.textContent = errorMsg;
+              pwError.style.display = "block";
+              pass.focus();
+              return false;
+            }
             out.textContent = 'Preparing download...';
             fetch('/download_project', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({cid: cid, project_name: projectName})
-            }).then(r => {
-              if(!r.ok) throw new Error("File not ready");
+              body: JSON.stringify({
+                cid: cid,
+                project_name: projectName,
+                zip_password: zipPassword
+              })
+            }).then(async r => {
+              if(r.status === 403) {
+                // wrong password (backend returns 403)
+                let err = await r.json();
+                out.textContent = 'Download error: ' + (err.error || 'Wrong password');
+                return Promise.reject();
+              }
+              if(!r.ok) {
+                let err = await r.json();
+                out.textContent = 'Download error: ' + (err.error || 'Error');
+                return Promise.reject();
+              }
               return r.blob();
             }).then(blob => {
+              if (!blob) return; // handled error already
               let a = document.createElement('a');
               a.href = window.URL.createObjectURL(blob);
               a.download = projectName + '.zip';
               document.body.appendChild(a); a.click();
               a.remove();
-              out.textContent = 'Download started!';
-            }).catch(err => {
-              out.textContent = 'Download error: ' + err;
-            });
+              out.textContent = '✅ Download started!';
+            }).catch(() => {});
           };
         });
     };

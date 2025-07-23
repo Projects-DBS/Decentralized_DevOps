@@ -4,116 +4,238 @@
   <meta charset="UTF-8">
   <title>IPFS ZIP Upload</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Inter font for modern appearance -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:400,500,600&display=swap">
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Inter', Arial, system-ui, sans-serif;
       background: #f7f7f7;
       margin: 0; padding: 0;
+      color: #222;
+      letter-spacing: 0.01em;
     }
     .container {
-      max-width: 500px;
-      margin: 60px auto;
+      max-width: 540px;
+      margin: 64px auto;
       background: #fff;
-      padding: 30px 40px 40px 40px;
-      border-radius: 12px;
-      box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+      padding: 36px 44px 44px 44px;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.10);
       text-align: center;
     }
     h2 {
-      margin-bottom: 30px;
-      color: #333;
+      margin-bottom: 32px;
+      color: #222;
       font-weight: 600;
+      font-size: 2rem;
+      letter-spacing: 0.01em;
+    }
+    /* Table Styling */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 32px;
+      background: #f6f8fa;
+      border-radius: 10px;
+      overflow: hidden;
+      font-size: 1rem;
+    }
+    thead tr {
+      background: #3477f5;
+      color: #fff;
+      font-weight: 500;
+    }
+    td, th {
+      padding: 12px 8px;
+      text-align: left;
+    }
+    tr:not(:last-child) td, tr:not(:last-child) th {
+      border-bottom: 1px solid #e3e7ef;
+    }
+    .no-servers {
+      color: #888;
+      padding: 16px;
+      text-align: center;
+      font-size: 1rem;
     }
     form input[type="file"] {
       display: block;
-      margin: 20px auto;
+      margin: 18px auto 10px auto;
+    }
+    .password-section {
+      margin: 10px 0 20px 0;
+      text-align: left;
+    }
+    form input[type="password"] {
+      display: block;
+      margin: 0 auto;
+      padding: 10px;
+      border-radius: 7px;
+      border: 1px solid #bbb;
+      font-size: 17px;
+      width: 80%;
+      box-sizing: border-box;
+      letter-spacing: 0.1em;
+    }
+    .password-hint {
+      font-size: 13px;
+      color: #888;
+      margin: 5px 0 0 10%;
+      text-align: left;
+    }
+    .error-msg {
+      color: #c00;
+      font-size: 14px;
+      font-weight: 500;
+      margin-top: 5px;
+      text-align: left;
+      margin-left: 10%;
     }
     form button {
       background: #3477f5;
       color: #fff;
       border: none;
-      padding: 12px 30px;
-      font-size: 18px;
+      padding: 14px 34px;
+      font-size: 19px;
       border-radius: 8px;
       cursor: pointer;
-      transition: background 0.3s ease;
+      font-weight: 600;
+      transition: background 0.3s;
+      margin-top: 6px;
+      letter-spacing: 0.04em;
     }
     form button:hover {
       background: #2657b5;
     }
     .flash {
-      margin-top: 20px;
-      color: green;
+      margin-top: 24px;
+      color: #008e3a;
       font-weight: 500;
       word-break: break-all;
+      white-space: pre-line;
+      font-size: 1.1rem;
+      letter-spacing: 0.02em;
     }
-    @media (max-width: 600px) {
+    @media (max-width: 640px) {
       .container {
-        margin: 30px 20px;
-        padding: 20px 25px 30px 25px;
+        margin: 30px 6px;
+        padding: 16px 7vw 20px 7vw;
+      }
+      h2 {
+        font-size: 1.35rem;
+      }
+      table, thead, tbody, tr, td, th {
+        font-size: 0.96rem;
       }
       form button {
         font-size: 16px;
-        padding: 10px 20px;
+        padding: 10px 18px;
       }
-    }
-    /* Add a little spacing for the server list */
-    #server-list {
-      margin-bottom: 30px;
-      text-align: left;
-    }
-    #servers-ul {
-      margin: 10px 0 0 20px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div id="server-list">
-      <strong>Online Servers:</strong>
-      <ul id="servers-ul"></ul>
-    </div>
     <h2>Upload a .zip to IPFS Cluster</h2>
-    <form id="f" method="post" action="/pushto_ipfs" enctype="multipart/form-data">
+    <div id="servers-table-container">
+      <table id="servers-table" style="display:none;">
+        <thead>
+          <tr>
+            <th style="width:40%;">Server Name</th>
+            <th style="width:30%;">Status</th>
+            <th style="width:30%;">Last Ping</th>
+          </tr>
+        </thead>
+        <tbody id="servers-tbody"></tbody>
+      </table>
+      <div id="no-servers" class="no-servers">Loading…</div>
+    </div>
+    <form id="f" method="post" action="/pushto_ipfs" enctype="multipart/form-data" autocomplete="off">
       <input type="file" name="zipfile" accept=".zip" required>
+      <div class="password-section">
+        <input type="password" id="zip_password" name="zip_password" placeholder="Encryption Password" required>
+        <div class="password-hint">
+          Password must be at least 8 characters, contain a letter and a number.
+        </div>
+        <div id="password-error" class="error-msg" style="display:none;"></div>
+      </div>
       <button type="submit">Upload</button>
     </form>
     <pre id="out" class="flash"></pre>
   </div>
 
   <script>
-  // Fetch server list and display
+  // Fetch server list and display in table
   async function loadServers() {
-    let ul = document.getElementById('servers-ul');
-    ul.innerHTML = '<li>Loading…</li>';
+    let table = document.getElementById('servers-table');
+    let tbody = document.getElementById('servers-tbody');
+    let noServers = document.getElementById('no-servers');
+    tbody.innerHTML = "";
+    noServers.style.display = "block";
+    table.style.display = "none";
+
     try {
       let resp = await fetch('/list-active-server');
       let data = await resp.json();
       if (data.servers && data.servers.length) {
-        ul.innerHTML = '';
-        data.servers.forEach(s =>
-          ul.innerHTML += `<li>${s.name}</li>`
-        );
+        data.servers.forEach(s => {
+          let status = s.status || 'Online';
+          let lastPing = s.last_ping || '—';
+          let row = `<tr>
+            <td>${s.name}</td>
+            <td style="color: #008e3a; font-weight: 500;">${status}</td>
+            <td>${lastPing}</td>
+          </tr>`;
+          tbody.innerHTML += row;
+        });
+        table.style.display = "table";
+        noServers.style.display = "none";
       } else {
-        ul.innerHTML = '<li>No online servers found.</li>';
+        noServers.textContent = 'No online servers found.';
       }
     } catch (e) {
-      ul.innerHTML = '<li>Error loading servers.</li>';
+      noServers.textContent = 'Error loading servers.';
     }
   }
   loadServers();
 
-  // Existing upload logic
+  // Password validation function
+  function validatePassword(pw) {
+    if (!pw || pw.length < 8) return 'At least 8 characters required.';
+    if (!/[A-Za-z]/.test(pw)) return 'At least one letter required.';
+    if (!/[0-9]/.test(pw)) return 'At least one number required.';
+    return '';
+  }
+
+  // Upload logic with password validation
   document.getElementById('f').onsubmit = async function(e) {
     e.preventDefault();
+    let passwordInput = document.getElementById('zip_password');
+    let pwError = document.getElementById('password-error');
+    pwError.style.display = "none";
+    let pwVal = passwordInput.value;
+    let errorMsg = validatePassword(pwVal);
+    if (errorMsg) {
+      pwError.textContent = errorMsg;
+      pwError.style.display = "block";
+      passwordInput.focus();
+      return false;
+    }
+
     let out = document.getElementById('out');
     out.textContent = 'Uploading…';
+
+    let form = document.getElementById('f');
+    let fd = new FormData(form);
+
     try {
-      let resp = await fetch('/pushto_ipfs', { method:'POST', body:new FormData(this) });
+      let resp = await fetch('/pushto_ipfs', { method:'POST', body: fd });
       let data = await resp.json();
-      out.textContent = data.success
-        ? 'CID: ' + data.cid
-        : 'Error: ' + data.error;
+      if (data.success) {
+        out.innerHTML = `✅ <strong>Version pushed to repository!</strong>\nCID: <span style="color:#2657b5">${data.cid}</span>`;
+      } else {
+        out.textContent = 'Error: ' + data.error;
+      }
     } 
     catch (err) {
       out.textContent = "Error: " + err;
@@ -122,97 +244,3 @@
   </script>
 </body>
 </html>
-
-
-
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>IPFS ZIP Upload</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f7f7f7;
-      margin: 0; padding: 0;
-    }
-    .container {
-      max-width: 500px;
-      margin: 60px auto;
-      background: #fff;
-      padding: 30px 40px 40px 40px;
-      border-radius: 12px;
-      box-shadow: 0 6px 24px rgba(0,0,0,0.08);
-      text-align: center;
-    }
-    h2 {
-      margin-bottom: 30px;
-      color: #333;
-      font-weight: 600;
-    }
-    form input[type="file"] {
-      display: block;
-      margin: 20px auto;
-    }
-    form button {
-      background: #3477f5;
-      color: #fff;
-      border: none;
-      padding: 12px 30px;
-      font-size: 18px;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.3s ease;
-    }
-    form button:hover {
-      background: #2657b5;
-    }
-    .flash {
-      margin-top: 20px;
-      color: green;
-      font-weight: 500;
-      word-break: break-all;
-    }
-    @media (max-width: 600px) {
-      .container {
-        margin: 30px 20px;
-        padding: 20px 25px 30px 25px;
-      }
-      form button {
-        font-size: 16px;
-        padding: 10px 20px;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>Upload a .zip to IPFS Cluster</h2>
-    <form id="f" method="post" action="/pushto_ipfs" enctype="multipart/form-data">
-      <input type="file" name="zipfile" accept=".zip" required>
-      <button type="submit">Upload</button>
-    </form>
-    <pre id="out" class="flash"></pre>
-  </div>
-
-  <script>
-  document.getElementById('f').onsubmit = async function(e) {
-    e.preventDefault();
-    let out = document.getElementById('out');
-    out.textContent = 'Uploading…';
-    try {
-      let resp = await fetch('/pushto_ipfs', { method:'POST', body:new FormData(this) });
-      let data = await resp.json();
-      out.textContent = data.success
-        ? 'CID: ' + data.cid
-        : 'Error: ' + data.error;
-    } 
-    catch (err) {
-      out.textContent = "Error: " + err;
-    }
-  };
-
-  </script>
-</body>
-</html> -->

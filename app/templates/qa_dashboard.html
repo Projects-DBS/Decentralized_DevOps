@@ -8,6 +8,25 @@
             background: #f7f7f7;
             margin: 0; padding: 0;
         }
+        /* Logout button style */
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            background: #e74c3c;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            z-index: 10;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .logout-btn:hover {
+            background: #c0392b;
+        }
         .container {
             max-width: 500px;
             margin: 60px auto;
@@ -51,18 +70,24 @@
                 font-size: 16px;
                 padding: 10px 0;
             }
+            .logout-btn {
+                top: 10px;
+                right: 10px;
+                padding: 8px 14px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- Logout button at top right -->
+    <a href="/logout" class="logout-btn">Logout</a>
     <div class="container">
         <h2>Welcome to QA Dashboard <span id="username-display">{{ username }}</span>.</h2>
         <div class="links">
             <a href="/ipfs-repo-operation">IPFS Repo Operation</a>
             <a href="/ci-cd-operations">CI CD Operation</a>
-            <a href="/logs">Logs</a>
         </div>
     </div>
-
 </body>
 </html>

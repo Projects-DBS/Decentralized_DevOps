@@ -27,11 +27,11 @@ RUN apt-get update && \
 RUN sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
     sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
     sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-    echo "AllowTcpForwarding yes" >> /etc/ssh/sshd_config && \
-    echo "PermitOpen any" >> /etc/ssh/sshd_config && \
-    echo "PermitTTY no" >> /etc/ssh/sshd_config && \
-    echo "PermitUserEnvironment no" >> /etc/ssh/sshd_config && \
-    echo "ForceCommand echo 'This account is for port forwarding only. No shell access.'" >> /etc/ssh/sshd_config
+    echo "AllowTcpForwarding yes" >> /etc/ssh/sshd_config 
+    # echo "PermitOpen any" >> /etc/ssh/sshd_config && \
+    # echo "PermitTTY no" >> /etc/ssh/sshd_config && \
+    # echo "PermitUserEnvironment no" >> /etc/ssh/sshd_config && \
+    # echo "ForceCommand echo 'This account is for port forwarding only. No shell access.'" >> /etc/ssh/sshd_config
 
 # Install go-ipfs
 RUN wget https://dist.ipfs.io/go-ipfs/v0.24.0/go-ipfs_v0.24.0_linux-amd64.tar.gz && \
