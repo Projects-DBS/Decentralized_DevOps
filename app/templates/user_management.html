@@ -124,6 +124,11 @@
             <input type="email" name="email" required>
             <label>Contact</label>
             <input type="tel" name="contact" required>
+            <!-- PUBLIC KEY UPLOAD SECTION -->
+            <label>Public Key (.pub)</label>
+            <input type="file" id="publicKeyInput" accept=".pub" required>
+            <div id="pubkey-filename" style="color:#357;font-size:14px;margin-bottom:8px;"></div>
+            <!-- /PUBLIC KEY UPLOAD SECTION -->
             <label>Password</label>
             <input type="password" name="password" required minlength="8">
             <label>Confirm Password</label>
@@ -146,7 +151,6 @@
 </div>
 
 <script>
-// ----------- DYNAMIC ROLES (main only, info below) -----------
 function loadRoles() {
     fetch('/roles')
       .then(r => r.json())
@@ -186,7 +190,6 @@ document.getElementById('roleSelect').onchange = function() {
     }
 };
 
-// ----------- ORGANIZATIONS -----------
 fetch('/organizations')
   .then(r => r.json())
   .then(orgs => {
@@ -200,7 +203,6 @@ fetch('/organizations')
       });
   });
 
-// ----------- OPERATIONS CHECKBOXES -----------
 fetch('/registration_parameter')
     .then(r=>r.json()).then(d=>{
         let ops = d.operations || [];
@@ -211,7 +213,6 @@ fetch('/registration_parameter')
         document.getElementById('operations').innerHTML = box;
     });
 
-// ----------- PAGE ACCESS CHECKBOXES -----------
 fetch('/registration_parameter_pages')
     .then(r=>r.json()).then(d=>{
         let pages = d.page_access || [];
@@ -222,7 +223,6 @@ fetch('/registration_parameter_pages')
         document.getElementById('pages').innerHTML = box;
     });
 
-// ----------- NAVIGATION LOGIC -----------
 function showSection(section) {
     document.getElementById('registrationSection').classList.remove('show');
     document.getElementById('removeUserSection').classList.remove('show');
@@ -242,7 +242,34 @@ function showSection(section) {
 document.getElementById('regNav').onclick = function(){ showSection('registration'); };
 document.getElementById('removeNav').onclick = function(){ showSection('remove'); };
 
-// ----------- REGISTRATION SUBMIT (VALIDATION) -----------
+let publicKeyText = '';
+document.getElementById('publicKeyInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    const label = document.getElementById('pubkey-filename');
+    publicKeyText = '';
+    label.textContent = '';
+
+    if (!file) return;
+    if (!file.name.endsWith('.pub')) {
+        label.textContent = "Please select a file with .pub extension.";
+        label.style.color = "#d32f2f";
+        e.target.value = '';
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        publicKeyText = ev.target.result;
+        label.textContent = "File loaded: " + file.name;
+        label.style.color = "#357";
+    };
+    reader.onerror = function() {
+        label.textContent = "Error reading file!";
+        label.style.color = "#d32f2f";
+        publicKeyText = '';
+    }
+    reader.readAsText(file);
+});
+
 document.getElementById('regForm').onsubmit = function(e){
     e.preventDefault();
     let f = e.target;
@@ -250,46 +277,45 @@ document.getElementById('regForm').onsubmit = function(e){
     msgDiv.textContent = '';
     msgDiv.className = '';
 
-    // Username
     if(!f.username.value || f.username.value.trim().length < 6) {
         msgDiv.textContent = "Username must be at least 6 characters.";
         msgDiv.className = "error";
         f.username.focus(); return;
     }
-    // First Name
     if(!f.first_name.value || f.first_name.value.trim().length < 3) {
         msgDiv.textContent = "First name must be at least 3 characters.";
         msgDiv.className = "error";
         f.first_name.focus(); return;
     }
-    // Last Name
     if(!f.last_name.value || f.last_name.value.trim().length < 3) {
         msgDiv.textContent = "Last name must be at least 3 characters.";
         msgDiv.className = "error";
         f.last_name.focus(); return;
     }
-    // Email
     let emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if(!emailPattern.test(f.email.value.trim())) {
         msgDiv.textContent = "Enter a valid email address.";
         msgDiv.className = "error";
         f.email.focus(); return;
     }
-    // Contact (simple validation, adjust as needed)
     let phonePattern = /^\d{10}$/;
     if(!phonePattern.test(f.contact.value.trim())) {
         msgDiv.textContent = "Contact must be a 10-digit number.";
         msgDiv.className = "error";
         f.contact.focus(); return;
     }
-    // Password
+    if (!publicKeyText) {
+        msgDiv.textContent = "Please upload your .pub public key file.";
+        msgDiv.className = "error";
+        document.getElementById('publicKeyInput').focus();
+        return;
+    }
     let pw = f.password.value, cpw = f.confirm_password.value;
     if(!pw || !cpw) {
         msgDiv.textContent = "Password fields cannot be empty.";
         msgDiv.className = "error";
         f.password.focus(); return;
     }
-    // Password strength: min 8, uppercase, lowercase, number
     let strongPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
     if(!strongPattern.test(pw)) {
         msgDiv.textContent = "Password must be at least 8 characters with uppercase, lowercase, and a number.";
@@ -301,14 +327,12 @@ document.getElementById('regForm').onsubmit = function(e){
         msgDiv.className = "error";
         f.confirm_password.focus(); return;
     }
-    // At least one operation
     let ops = f.querySelectorAll('input[name="operations"]:checked');
     if(ops.length < 1) {
         msgDiv.textContent = "Select at least one operation.";
         msgDiv.className = "error";
         return;
     }
-    // At least one page access
     let pags = f.querySelectorAll('input[name="page_access"]:checked');
     if(pags.length < 1) {
         msgDiv.textContent = "Select at least one page access.";
@@ -316,7 +340,6 @@ document.getElementById('regForm').onsubmit = function(e){
         return;
     }
 
-    // Prepare Data
     let data = {
         username: f.username.value.trim(),
         first_name: f.first_name.value.trim(),
@@ -327,10 +350,10 @@ document.getElementById('regForm').onsubmit = function(e){
         contact: f.contact.value.trim(),
         password: pw,
         operations: Array.from(ops).map(x=>x.value),
-        page_access: Array.from(pags).map(x=>x.value)
+        page_access: Array.from(pags).map(x=>x.value),
+        public_key: publicKeyText
     };
 
-    // Register (same as before)
     fetch('/register', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
@@ -344,7 +367,8 @@ document.getElementById('regForm').onsubmit = function(e){
                 msgDiv.className = resp.success ? "success" : "error";
                 if(resp.success) {
                     f.reset();
-                    // --- POPUP ---
+                    publicKeyText = '';
+                    document.getElementById('pubkey-filename').textContent = '';
                     alert("User Registered Successfully!");
                 }
             });
@@ -361,7 +385,6 @@ document.getElementById('regForm').onsubmit = function(e){
     });
 }
 
-// ----------- REMOVE USER -----------
 function loadUserList() {
     fetch('/list_all_users')
     .then(r => r.json())

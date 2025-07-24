@@ -1,14 +1,13 @@
 from datetime import datetime, timedelta, timezone
 import os
 import re
-import shutil
 import socket
 import subprocess
 import tempfile
 from time import sleep
 import zipfile
 from flask import Flask, json, jsonify, make_response, render_template, request, redirect, send_file, url_for, flash, session
-from services.ipfs import ipfs_connect, remove_user_info, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
+from services.ipfs import ipfs_connect, remove_user_info, remove_user_pubkey, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
 from services.crypto import decrypt_openssl
 from services.session import check_session
 from werkzeug.utils import secure_filename
@@ -24,7 +23,6 @@ ports = {
 
 status, keys = ipns_keys()
 if status != True:
-    print(keys)
     exit()
 ipns_key_access_control = keys.get("access_control")
 ipns_key_projects = keys.get("projects")
@@ -32,17 +30,18 @@ ipns_key_project_builds = keys.get("project_builds")
 ipns_key_misc = keys.get("misc")
 ipns_key_logs = keys.get("logs")
 ipns_key_roles = keys.get("roles")
+ipns_key_userpublickey = keys.get("user_publickey")
 
 
 
 app = Flask(__name__)
 app.secret_key = os.urandom(32)
 app.permanent_session_lifetime = timedelta(minutes=10)
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB limit
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  
 
-app.config['SESSION_COOKIE_HTTPONLY'] = True      # Prevents JS from reading the cookie
-app.config['SESSION_COOKIE_SECURE'] = True        # Sends cookie only over HTTPS
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'     # Or 'Strict' for more strict cross-site control
+app.config['SESSION_COOKIE_HTTPONLY'] = True     
+app.config['SESSION_COOKIE_SECURE'] = True       
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'     
  
 
 TEMP_DIR = '/tmp'
@@ -58,15 +57,13 @@ def get_client_ip():
 
 
 
-
 @app.route('/get_logs', methods=['GET'])
 def get_all_logs():
     status = check_session(session, "logs")
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    logs = get_logs(ipns_key_logs)   # {ip: [log_dicts]}
-    # Render template, then set no-cache headers
+    logs = get_logs(ipns_key_logs)  
     response = make_response(render_template("logs_table.html", logs=logs))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
@@ -117,7 +114,11 @@ def remove_user():
         username = data.get('username')
         if username == "admin" or username == "Admin":
             return jsonify({"success": False, "message": "You cannot remove admin from the Access."})
+
         success, message = remove_user_info(ipns_key_access_control, username)
+        if success != True:
+            return jsonify({"success": success, "message": message})
+
         immutable_application_log(session, "remove_user", "user-management", f"User removed.",ipns_key_logs)
         
             
@@ -137,13 +138,11 @@ def cicd_page():
         flash(status)
         return redirect(url_for("login"))
     immutable_application_log(session, "view_pipeline_operations", "ci-cd-operations", "View Pipeline operation visited.",ipns_key_logs)
-    
     return render_template("cicd_operations.html")
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    session.clear()
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -171,7 +170,6 @@ def login():
                     return redirect(url_for("login"))
                 access_control_cid = decrypt_openssl(user_access, password).decode()
                 access_info = get_document_ipfs_cid(access_control_cid, IPFS_URL)
-                
                 session.permanent = True
                 session["username"] = access_info.get("username")
                 session["role"] = access_info.get("role")
@@ -179,7 +177,7 @@ def login():
                 session['expiry'] = expiry_time.timestamp()
                 session["page_access"] = access_info.get("pages", [])
                 session["access_info"] = access_info
-                session["organization"] = access_info.get("organization", []) # <--- Store access_info in session
+                session["organization"] = access_info.get("organization", []) 
                 session["start_time"] = datetime.now(timezone.utc).isoformat()
                 immutable_application_log(session, "login", "login_page", "Login successfull",ipns_key_logs)
                 
@@ -227,14 +225,12 @@ def list_roles():
         if status != True:
             flash(status)
             return redirect(url_for("login"))
-        print(ipns_key_roles)
         cmds = f"ipfs name resolve --nocache -r {ipns_key_roles}"
         result = subprocess.run(cmds, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             return jsonify({"message":"Unable to retrieve roles from the IPNS Records."})
         role_cid = result.stdout.strip().replace('\n','')
 
-        print(role_cid)
         
         cmd1 = f"ipfs cat {role_cid}"
         result = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
@@ -242,7 +238,6 @@ def list_roles():
             return jsonify({"message":"Unable to retrieve roles from the IPFS Cluster."})
         role_info = result.stdout.strip().replace('\n','')
         roles = json.loads(role_info)
-        print(roles)
         return roles["roles"]
     except Exception as e:
         return jsonify({"message":"Unable to retrieve roles from IPFS Cluster."})
@@ -346,8 +341,8 @@ def build_info():
 
 @app.route('/logout')
 def logout():
-    session.clear()  # This clears the entire session
-    return redirect(url_for('login'))  # Or wherever you want to go
+    session.clear()  
+    return redirect(url_for('login')) 
 
 @app.route('/decommission', methods=['POST'])
 def decommission():
@@ -361,8 +356,7 @@ def decommission():
         deployment_server_password = data.get('deployment_server_password')
         tag = data.get('tag')
 
-        port = ports.get(tag)  # Assuming your 'ports' dict exists
-
+        port = ports.get(tag) 
         if not all([server_list, deployment_server_password, tag, port]):
             return jsonify({"status": "error", "message": "Missing required parameters"}), 400
 
@@ -371,7 +365,6 @@ def decommission():
 
         for server in server_list:
             try:
-                # Correctly quoted pkill for only the right gunicorn
                 stop_cmd = f'fuser -k {port}/tcp || true'
                 cmd = (
                     f'sshpass -p "{deployment_server_password}" ssh -o StrictHostKeyChecking=no '
@@ -379,7 +372,6 @@ def decommission():
                 )
                 stop_data = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
                 
-                # Optionally clean up the deployment directory
                 project_dir = f"/home/guest/www/{tag}"
                 cleanup_cmd = f'rm -rf {project_dir}'
                 cleanup_full_cmd = (
@@ -388,7 +380,6 @@ def decommission():
                 )
                 cleanup_data = subprocess.run(cleanup_full_cmd, shell=True, capture_output=True, text=True, timeout=30)
 
-                # Check if both commands were successful
                 if cleanup_data.returncode == 0 and stop_data.returncode == 0:
                     success_servers.append(server)
                 else:
@@ -458,7 +449,6 @@ def deploy():
 
         for server in server_list:
             try:
-                # 1. Download via IPFS
                 cmd = (
                     f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
                     f'"mkdir -p /home/guest/www/{tag}/{build_cid}/webapp/ && '
@@ -469,7 +459,6 @@ def deploy():
                     failed_servers.append({"server": server, "step": 1, "stderr": data.stderr.strip()})
                     continue
 
-                # 2. Decrypt artifact
                 cmd1 = (
                     f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
                     f'"openssl enc -d -aes-256-cbc -pbkdf2 '
@@ -484,7 +473,6 @@ def deploy():
                     failed_servers.append({"server": server, "step": 2, "stderr": data1.stderr.strip()})
                     continue
 
-                # 3. Unzip, start gunicorn, check port
                 project_dir = f"/home/guest/www/{tag}/{build_cid}/webapp"
                 zip_file = f"{project_dir}/{build_cid}.zip"
                 run_command = (
@@ -503,7 +491,6 @@ def deploy():
                 if "__DEPLOY_SUCCESS__" in data2.stdout:
                     success_servers.append(server)
                 else:
-                    # Get last 50 lines of app.log for diagnostics
                     log_cmd = (
                         f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
                         f'"tail -n 50 {project_dir}/app.log 2>/dev/null"'
@@ -554,117 +541,6 @@ def deploy():
 
 
 
-# @app.route('/deploy', methods=['POST'])
-# def deploy():
-#     status = check_session(session, "deploy")
-#     if status != True:
-#         return jsonify({"status": "error", "message": str(status)}), 401
-
-#     try:
-#         data = request.get_json()
-#         server_list = data.get('server_list', [])
-#         build_cid = data.get('build_cid')
-#         artifact_password = data.get('artifact_password')
-#         deployment_server_password = data.get('deployment_server_password') 
-#         tag = data.get('tag')
-#         port = ports.get(tag)
-
-#         if not all([server_list, build_cid, artifact_password, deployment_server_password, tag, port]):
-#             return jsonify({"status": "error", "message": "Missing required parameters"}), 400
-
-#         for server in server_list:
-#             command = f'mkdir -p /home/guest/www/{tag}/{build_cid}/webapp/ && ipfs get {build_cid} -o /home/guest/www/{tag}/{build_cid}/webapp/'
-#             cmd = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command}"'
-#             data = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-#             if data.returncode != 0:
-#                 return jsonify({"status": "error", "message": f"Failed to fetch artifact for server {server}: {data.stderr.strip()}"}), 500
-
-#             command1 = f'openssl enc -d -aes-256-cbc -pbkdf2 -in /home/guest/www/{tag}/{build_cid}/webapp/{build_cid} -out /home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip -pass pass:{artifact_password}'
-#             cmd1 = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command1}"'
-#             data1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
-#             if data1.returncode != 0:
-#                 return jsonify({"status": "error", "message": f"Failed to decrypt artifact for server {server}: {data1.stderr.strip()}"}), 500
-
-#             zip_file = f'/home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip'
-#             root_install = f"/home/guest/www/{tag}/{build_cid}/webapp"
-#             command2 = (
-#                 f'unzip -o "{zip_file}" -d "{root_install}" && '
-#                 f'cd "{root_install}" && '
-#                 f'found=$(find . -type f -name app.py | head -n 1) && '
-#                 f'dir=$(dirname "$found") && '
-#                 f'nohup gunicorn app:app --bind 0.0.0.0:{port} > app.log 2>&1 & '
-#                 f'echo "Application deployed on {server} on port {port}"'
-#             )
-#             cmd2 = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command2}"'
-#             data2 = subprocess.run(cmd2, shell=True, capture_output=True, text=True)
-#             sleep(5)
-#             if data2.returncode != 0:
-#                 print(f"Deployment failed on server {server}: {data2.stderr.strip()}")
-
-#         return jsonify({"status": "success", "message": "Deployment done!"})
-
-#     except Exception as e:
-#         return jsonify({"status": "error", "message": f"Deployment failed: {str(e)}"}), 500
-
-
-# @app.route('/deploy', methods=['POST'])
-# def deploy():
-#     status = check_session( session,"deploy")
-#     if status != True:
-#         flash(status)
-#         return redirect(url_for("login"))
-#     try:
-        
-#         data = request.get_json()
-#         server_list = data.get('server_list',[])
-#         build_cid = data.get('build_cid')
-#         artifact_password = data.get('artifact_password')
-#         deployment_server_password = data.get('deployment_server_password') 
-#         tag = data.get('tag')
-#         port = ports.get(tag)
-#         print("Part 1")
-#         print(f"{data}")
-
-#         for server in server_list:
-#             print("Part 2")
-#             print(f"{server}")
-#             command = f'mkdir /home/guest/www/{tag}/{build_cid}/webapp/ && ipfs get {build_cid} -o /home/guest/www/{tag}/{build_cid}/webapp/'
-#             cmd = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} {command}'
-#             data = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-#             print(data.stdout.strip().replace('\n',''))
-#             if data.returncode == 0:
-#                 print("Part 3")
-#                 command1 = f'openssl enc -d -aes-256-cbc -pbkdf2 -in {build_cid} -out /home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip -pass pass:{artifact_password}'
-#                 cmd1 = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} {command1}'
-#                 data1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
-#                 print("PArt 4")
-#                 print(data1.stdout.strip().replace('\n',''))
-#                 if data1.returncode == 0:
-#                     zip_file = f'/home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip'
-#                     root_install = f"/home/guest/www/{tag}/{build_cid}/webapp"
-#                     command2 = ( 
-#                         f'unzip -o "{zip_file}" -d "{root_install}" && '
-#                         f'cd "{root_install}" && '
-#                         f'found=$(find . -type f -name app.py | head -n 1) &&'
-#                         f'dir=$(dirname "$found") && '
-#                         f'nohup gunicorn app:app --bind 0.0.0.0:{port} > app.log 2>&1 & '
-#                         f'echo "Application deployed on {server} on port {port}"'
-#                     )
-#                     cmd2 = f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{command2}"'
-#                     data2 = subprocess.run(cmd2, shell=True, capture_output=True, text=True)
-#                     if data2.returncode != 0:
-#                         raise("Deployment failed.")
-
-#         flash("Deployment done!")
-#         return render_template('deploy.html')
-
-#     except Exception as e:
-#         print(f"str({e})")
-#         flash(f"Deployment Failed!. Message: {str(e)}")
-#         return render_template('deploy.html')
-
-
-
 @app.route('/check-port-availability', methods=['POST'])
 def check_port():
     status = check_session( session,"build")
@@ -703,10 +579,7 @@ def available_servers():
         flash(status)
         return redirect(url_for("login"))
     try:
-        # cmd = 'ipfs swarm peers'
-        # data = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        # ip_list = re.findall(r'/ip[46]/([^\s/]+)/', data.stdout)
-        # unique_ips = set(ip_list)  # remove duplicates here
+       
 
         cmd = 'ipfs-cluster-ctl peers ls'
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
@@ -746,24 +619,20 @@ def download_project():
             enc_path = os.path.join(tmpdir, f"{project_name}.zip.enc")
             dec_path = os.path.join(tmpdir, f"{project_name}.zip")
 
-            # Download encrypted file from IPFS
             subprocess.run(['ipfs', 'get', cid, '-o', enc_path], check=True)
 
-            # Decrypt file using password
             dec_cmd = [
                 'openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-in', enc_path,
                 '-out', dec_path, '-pass', f'pass:{zip_password}'
             ]
             dec_result = subprocess.run(dec_cmd, capture_output=True, text=True)
 
-            # Check if decryption failed (wrong password or corrupted file)
             if dec_result.returncode != 0:
                 if "bad decrypt" in dec_result.stderr.lower() or "error" in dec_result.stderr.lower():
                     return jsonify({'error': 'wrong password'}), 403
                 else:
                     return jsonify({'error': dec_result.stderr.strip() or "Decryption failed"}), 500
 
-            # On success, send the decrypted zip
             immutable_application_log(session, "download_project", "pull_from_ipfs", "Downloading the Project.",ipns_key_logs)
             
                 
@@ -776,32 +645,6 @@ def download_project():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-# @app.route('/download_project', methods=['POST'])
-# def download_project():
-#     status = check_session( session,"pullfrom_ipfs")
-#     if status != True:
-#         flash(status)
-#         return redirect(url_for("login"))
-#     try:
-#         data = request.get_json()
-#         cid = data['cid']
-#         project_name = data['project_name']
-
-#         with tempfile.TemporaryDirectory() as tmpdir:
-#             # Download ZIP file from IPFS directly
-#             zip_path = os.path.join(tmpdir, f"{project_name}.zip")
-#             cmd = f"ipfs get {cid} -o {zip_path}"
-#             out = os.system(cmd)
-#             if out != 0 or not os.path.exists(zip_path):
-#                 raise Exception("Failed to download ZIP from IPFS")
-#             # Send the zip file as a download
-#             return send_file(zip_path, as_attachment=True, download_name=f"{project_name}.zip")
-
-
-
-#     except Exception as e:
-#         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/project_info', methods=['POST'])
@@ -842,8 +685,8 @@ def trigger_ci_build():
     data = request.get_json()
     cid = data.get('cid')
     tag = data.get('tag')
-    project_zip_password = data.get("zip_password")          # password for project zip decryption
-    build_zip_password = data.get("build_zip_password")      # password to encrypt build artifact
+    project_zip_password = data.get("zip_password")         
+    build_zip_password = data.get("build_zip_password")     
     project_name = data.get("project_name")
 
     if not build_zip_password:
@@ -854,19 +697,16 @@ def trigger_ci_build():
         dec_zip_path = os.path.join(tmpdir, f"{cid}.zip")
         extract_dir = os.path.join(tmpdir, "extracted")
 
-        # Step 1: Download encrypted .zip.enc from IPFS
         cmd = f'ipfs get {cid} -o "{enc_zip_path}"'
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to retrieve the requested project from CID for build."})
 
-        # Step 2: Decrypt .zip.enc to .zip using project_zip_password
         dec_cmd = f'openssl enc -d -aes-256-cbc -pbkdf2 -in "{enc_zip_path}" -out "{dec_zip_path}" -pass pass:{project_zip_password}'
         dec_result = subprocess.run(dec_cmd, shell=True, capture_output=True, text=True)
         if dec_result.returncode != 0:
             return jsonify({"success": False, "message": "Decryption failed. Wrong project password or corrupt file."})
 
-        # Step 3: Extract the zip to a directory
         os.makedirs(extract_dir, exist_ok=True)
         try:
             with zipfile.ZipFile(dec_zip_path, 'r') as zip_ref:
@@ -874,7 +714,6 @@ def trigger_ci_build():
         except Exception as e:
             return jsonify({"success": False, "message": f"Failed to extract zip: {e}"})
 
-        # Step 4: Find .py file and zip the containing folder (or all extracted files)
         zipped = False
         for root, dirs, files in os.walk(extract_dir):
             for file in files:
@@ -890,20 +729,17 @@ def trigger_ci_build():
         zip_path = os.path.join(root, f"{cid}_build.zip")
         enc_build_path = os.path.join(root, f"{cid}_build.zip.enc")
 
-        # Step 5: Encrypt the build zip with the build password
         enc = f'openssl enc -aes-256-cbc -pbkdf2 -salt -in "{zip_path}" -out "{enc_build_path}" -pass pass:{build_zip_password}'
         result = subprocess.run(enc, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             return jsonify({"success": False, "message": "Encrypting the build failed!"})
 
-        # Step 6: Push encrypted build zip to IPFS Cluster
         cmd = f'ipfs-cluster-ctl add -q "{enc_build_path}"'
         ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if ipfs_result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
         new_cid = ipfs_result.stdout.strip()
 
-        # Step 7: Get current build records from IPNS
         cmd = f'ipfs name resolve --nocache -r {ipns_key_project_builds}'
         resolve_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if resolve_result.returncode != 0:
@@ -915,7 +751,6 @@ def trigger_ci_build():
         if cat_result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to read the build records from IPNS and IPFS."})
 
-        # Step 8: Prepare new build entry, auto-increment version
         try:
             builds_data = json.loads(cat_result.stdout.strip().replace('\n', ''))
         except Exception:
@@ -944,7 +779,6 @@ def trigger_ci_build():
             builds_data["project_builds"] = []
         builds_data["project_builds"].append(new_entry)
 
-        # Step 9: Add updated build records to IPFS Cluster
         with tempfile.NamedTemporaryFile("w", delete=False) as tmpf:
             json.dump(builds_data, tmpf, indent=2)
             tmpf_path = tmpf.name
@@ -957,7 +791,6 @@ def trigger_ci_build():
 
         updated_cid = ipfs_result.stdout.strip()
 
-        # Step 10: Publish updated build records to IPNS
         cmd = f'ipfs name publish --key=project_builds {updated_cid}'
         publish_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         os.remove(tmpf_path)
@@ -972,142 +805,6 @@ def trigger_ci_build():
             "message": f"Project build for tag '{tag}' completed successfully.",
             "build_cid": new_cid
         })
-
-    
-# @app.route('/trigger-build-ci', methods=['POST'])
-# def trigger_ci_build():
-#     status = check_session( session,"ci")
-#     if status != True:
-#         flash("Session expired!")
-#         return redirect(url_for("login"))
-#     data = request.get_json()
-#     cid = data.get('cid')
-#     tag = data.get('tag')
-#     zip_password = data.get("zip_password")
-#     project_name = data.get("project_name")
-
-#     print(data)
-#     print(cid)
-#     print(tag)
-#     print(zip_password)
-#     print(project_name)
-    
-
-
-#     cmd = f"cd /tmp/ ipfs get {cid}"
-#     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-#     if result.returncode != 0:
-#         return jsonify({
-#             "success": False,
-#             "message": "Unable to retrieve the requested project from CID for build."
-#         })
-#     zipped = False
-
-#     for root, dir, files in os.walk(f'/tmp/{cid}'):
-#         for file in files:
-#             if file.endswith(".py"):
-#                 subprocess.run(['zip','-r',f'{cid}.zip','.'],cwd=root)
-#                 zipped = True
-#                 break
-#         if zipped:
-#             break
-#     if not zipped:
-#         return jsonify({
-#             "success": False,
-#             "message": "No .py file found in project, nothing to zip."
-#         })
-#     zip_path = os.path.join(root, f"{cid}.zip")
-#     enc_path = os.path.join(root, f"{cid}.zip.enc")
-#     enc = f'openssl enc -aes-256-cbc -pbkdf2 -salt -in "{zip_path}" -out "{enc_path}" -pass pass:{zip_password}'
-#     result = subprocess.run(enc, shell=True, capture_output=True, text=True)
-#     if result.returncode != 0:
-#         return jsonify({
-#             "success": False,
-#             "message": "Encrypting the build failed!"
-#         })
-
-#     cmd = f'ipfs-cluster-ctl add -q "{enc_path}"'
-#     ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-#     if ipfs_result.returncode != 0:
-#         return jsonify({
-#             "success": False,
-#             "message": "Unable to add the new build info to IPFS Cluster."
-#         })
-#     new_cid = ipfs_result.stdout.strip()
-
-#     cmd = f'ipfs name resolve --nocache -r {ipns_key_project_builds}'
-#     resolve_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-#     if resolve_result.returncode != 0:
-#         return jsonify({
-#             "success": False,
-#             "message": "Unable to resolve the IPNS Key for latest CID."
-#         })
-#     current_builds_cid = resolve_result.stdout.strip()
-
-#     cat_cmd = f'ipfs cat {current_builds_cid}'
-#     cat_result = subprocess.run(cat_cmd, shell=True, capture_output=True, text=True)
-#     if cat_result.returncode != 0:
-#         return jsonify({
-#             "success": False,
-#             "message": "Unable to read the build records from IPNS and IPFS."
-#         })
-#     builds_data = json.loads(cat_result.stdout.strip().replace('\n', ''))
-#     builds_list = builds_data.get("project_builds", [])
-#     matching_builds = [b for b in builds_list if b["project_name"] == project_name and b["tag"] == tag]
-#     if matching_builds:
-#         # Find the max version, handle as int if possible
-#         try:
-#             max_version = max(int(b.get("version", 0)) for b in matching_builds)
-#             version = str(max_version + 1)
-#         except Exception:
-#             version = "1"
-#     else:
-#         version = "1"
-
-#     new_entry = {
-#         "project_name": project_name,
-#         "build_cid": new_cid,
-#         "built_by": session.get("username"),
-#         "timestamp": datetime.now(timezone.utc).isoformat(),
-#         "version": version,
-#         "tag": tag
-#     }
-
-#     if "project_builds" not in builds_data or not isinstance(builds_data["project_builds"], list):
-#         builds_data["project_builds"] = []
-    
-#     builds_data["project_builds"].append(new_entry)
-
-#     with tempfile.NamedTemporaryFile("w", delete=False) as tmpf:
-#         json.dump(builds_data, tmpf, indent=2)
-#         tmpf_path = tmpf.name
-    
-#     cmd = f'ipfs-cluster-ctl add -q "{tmpf_path}"'
-
-#     ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-
-#     if ipfs_result.returncode != 0:
-#         return jsonify({
-#             "success": False,
-#             "message": "Unable to add the new build info to IPFS Cluster."
-#         })
-    
-#     updated_cid = ipfs_result.stdout.strip()
-
-#     cmd = f'ipfs name publish --key=project_builds {updated_cid}'
-#     publish_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-#     if publish_result.returncode != 0:
-#         return jsonify({
-#             "success": False,
-#             "message": "Unable to publish the new build info to IPNS."
-#         })
-#     os.remove(tmpf_path)
-#     return jsonify({
-#         "success": True,
-#         "message": f"Project build for tag '{tag}' completed successfully."
-#     })
-
-
 
 
 
@@ -1174,6 +871,20 @@ def reg_parameters_pages():
 
 
 
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
 @app.route("/register", methods=['POST'])
 def register():
     status = check_session( session,"user_management")
@@ -1181,6 +892,37 @@ def register():
         flash(status)
         return jsonify({"success": False, "message": status}), 401
     data = request.get_json()
+    public_key = data.get('public_key')
+    public_key = str(public_key).replace('\n','').replace('\r','')
+
+
+    cmd01 = f"ipfs name resolve --nocache -r {ipns_key_userpublickey}"
+    res01 = subprocess.run(cmd01, shell=True, capture_output=True, text=True)
+    res01 = res01.stdout.strip().replace('\n','')
+
+    cmd02 = f'ipfs cat {res01}'
+    res02 = subprocess.run(cmd02, shell=True, capture_output=True, text=True)
+    res02 = res02.stdout.strip().replace('\n','').replace('\r','')
+    ipns_pubkey_record = json.loads(res02)
+    
+
+    ipns_pubkey_record["records"].append(public_key)
+
+    json_string = json.dumps(ipns_pubkey_record)
+
+    with tempfile.NamedTemporaryFile(delete=False, mode='w') as tmp:
+        tmp.write(json_string)
+        tmp_paths = tmp.name
+
+    cmd03 = f'ipfs-cluster-ctl add -q {tmp_paths}'
+    res03 = subprocess.run(cmd03, shell=True, capture_output=True, text=True)
+    res03 = res03.stdout.strip().replace('\n','')
+
+    cmd04 = f'ipfs name publish --key=user_publickey {res03}'
+    res04 = subprocess.run(cmd04, shell=True, capture_output=True, text=True)
+    if res04.returncode != 0:
+        return jsonify({"success": False, "message": "Unable to register the public key."}), 400
+
     formatted = {
         "username": data.get('username', ''),
         "first_name": data.get('first_name', ''),
@@ -1247,7 +989,6 @@ def register():
             datas["access_control"].append(access_control)
 
         else:
-            # if not present or not a list, initialize it as a list
             datas["access_control"] = [formatted]
         updated_json_str = json.dumps(datas, indent=2)
 
@@ -1273,12 +1014,17 @@ def register():
         return jsonify({"success": False, "message": "Unable to register the user."}), 500
 
     finally:
-        # Remove temp file
         import os
         os.remove(tmp_path)
     
 
-
+@app.errorhandler(413)
+def too_large(e):
+    if request.accept_mimetypes['application/json'] or request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify(success=False, error='File too large! Max upload is 100 MB.'), 413
+    else:
+        flash('File too large! Max upload is 100 MB.')
+        return redirect(request.url)
 
 @app.route('/pushto_ipfs', methods=['POST'])
 def pushto_ipfs():
@@ -1295,7 +1041,7 @@ def pushto_ipfs():
     
 
     f = request.files.get('zipfile')
-    zip_password = request.form.get('zip_password')  # Or use request.json if you send as JSON
+    zip_password = request.form.get('zip_password') 
 
     if not f or not f.filename.lower().endswith('.zip'):
         return jsonify(success=False, error='Please upload a .zip'), 400
@@ -1303,12 +1049,10 @@ def pushto_ipfs():
     if not zip_password:
         return jsonify(success=False, error="Password required to encrypt the file."), 400
 
-    # Save uploaded zip file
     filename = secure_filename(f.filename)
     zip_path = os.path.join(TEMP_DIR, filename)
     f.save(zip_path)
 
-    # Encrypt the zip file
     enc_zip_path = zip_path + ".enc"
     enc_cmd = f'openssl enc -aes-256-cbc -pbkdf2 -salt -in "{zip_path}" -out "{enc_zip_path}" -pass pass:{zip_password}'
     enc_res = subprocess.run(enc_cmd, shell=True, capture_output=True, text=True)
@@ -1316,7 +1060,6 @@ def pushto_ipfs():
         return jsonify(success=False, error="Encryption failed: " + enc_res.stderr.strip()), 500
 
     try:
-        # Push the encrypted zip to IPFS Cluster
         cmd = f'ipfs-cluster-ctl add "{enc_zip_path}" | tail -n1 | cut -d" " -f2'
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if res.returncode != 0:
@@ -1324,10 +1067,7 @@ def pushto_ipfs():
 
         new_cid = res.stdout.strip()
 
-        print(f"Hello, Part3 done: {new_cid}")
-        print("Invoking the update method")
 
-        # project_name is taken from the zip filename
         project_name, _ = os.path.splitext(filename)
         status = update_project_record(new_cid, None, ipns_key_projects, project_name, access_info)
 
@@ -1340,11 +1080,8 @@ def pushto_ipfs():
             return jsonify(success=False, error="Failed to push the project to the repo."), 500
 
     except Exception as e:
-        import traceback
-        print("Exception in /pushto_ipfs:", traceback.format_exc())
         return jsonify(success=False, error=str(e)), 500
     finally:
-        # Clean up files
         for path in [zip_path, enc_zip_path]:
             try:
                 if os.path.exists(path):
@@ -1353,65 +1090,6 @@ def pushto_ipfs():
                 pass
 
 
-
-# @app.route('/pushto_ipfs', methods=['POST'])
-# def pushto_ipfs():
-#     status = check_session( session,"pushto_ipfs")
-#     if status != True:
-#         flash(status)
-#         return redirect(url_for("login"))
-
-#     access_info = session.get("access_info")
-#     if not access_info:
-#         return jsonify(success=False, error="Session invalid, please re-login."), 401
-
-#     f = request.files.get('zipfile')
-#     if not f or not f.filename.lower().endswith('.zip'):
-#         return jsonify(success=False, error='Please upload a .zip'), 400
-
-#     # ensure temp dir exists
-#     os.makedirs(TEMP_DIR, exist_ok=True)
-
-#     filename = secure_filename(f.filename)
-#     project_name, _ = os.path.splitext(filename)
-#     zip_path = os.path.join(TEMP_DIR, filename)
-#     f.save(zip_path)
-#     extract_dir = TEMP_DIR
-
-
-#     os.makedirs(extract_dir, exist_ok=True)
-#     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-#         zip_ref.extractall(extract_dir)
-
-
-#     try:
-#         cmd = f"ipfs-cluster-ctl add -r {zip_path} | tail -n1 | cut -d' ' -f2"
-#         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-
-#         if res.returncode != 0:
-#             return jsonify(success=False, error=res.stderr.strip()), 500
-
-#         new_cid = res.stdout.strip()
-
-#         print(f"Hello, Part3 done: {new_cid}")
-#         print("Invoking the update method")
-
-#         status = update_project_record(new_cid, None, ipns_key_projects, project_name, access_info)
-
-#         if status == True:
-#             return jsonify(success=True, cid=new_cid)
-#         else:
-#             return jsonify(success=False, error="Failed to push the project to the repo."), 500
-
-#     except Exception as e:
-#         import traceback
-#         print("Exception in /pushto_ipfs:", traceback.format_exc())
-#         return jsonify(success=False, error=str(e)), 500
-#     finally:
-#         try:
-#             os.remove(zip_path)
-#         except OSError:
-#             pass
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=1000)
