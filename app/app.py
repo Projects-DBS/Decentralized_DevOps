@@ -34,6 +34,75 @@ ipns_key_userpublickey = keys.get("user_publickey")
 
 
 
+def resolve_ipns(ipns_key):
+    try:
+        result = subprocess.run(
+            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+            text=True
+        )
+        cid = result.stdout.strip().replace("/ipfs/", "")
+        return cid
+    except subprocess.CalledProcessError as e:
+        print(f"[Resolve Error] {ipns_key}: {e.stderr}")
+        return None
+
+def cat_ipfs(cid):
+    try:
+        result = subprocess.run(
+            ["ipfs", "cat", cid],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+            text=True
+        )
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"[Cat Error] {cid}: {e.stderr}")
+        return None
+
+
+
+def initialize_ipns_data():
+    categories = {
+        "access_control": ipns_key_access_control,
+        "projects": ipns_key_projects,
+        "project_builds": ipns_key_project_builds,
+        "misc": ipns_key_misc,
+        "logs": ipns_key_logs,
+        "roles": ipns_key_roles,
+        "user_publickey": ipns_key_userpublickey
+    }
+
+    for category, key_list in categories.items():
+        # Ensure it's a list
+        if not isinstance(key_list, list):
+            print(f"[Warning] Skipping '{category}' — not a list")
+            continue
+
+        for ipns_key in key_list:
+            # Basic validation: must be a non-empty string
+            if not isinstance(ipns_key, str) or not ipns_key.strip():
+                print(f"[Warning] Skipping invalid IPNS key in '{category}': {ipns_key}")
+                continue
+
+            print(f"[Info] Resolving {category} → {ipns_key}")
+            cid = resolve_ipns(ipns_key)
+            if cid:
+                print(f"[Info] → Resolved CID: {cid}")
+                content = cat_ipfs(cid)
+                # You could store or use `content` here if needed
+            else:
+                print(f"[Error] Failed to resolve IPNS key: {ipns_key}")
+
+    return True
+
+
+
+initialize_ipns_data()
+
 app = Flask(__name__)
 app.secret_key = os.urandom(32)
 app.permanent_session_lifetime = timedelta(minutes=10)
@@ -42,7 +111,8 @@ app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 app.config['SESSION_COOKIE_HTTPONLY'] = True     
 app.config['SESSION_COOKIE_SECURE'] = True       
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'     
- 
+
+
 
 TEMP_DIR = '/tmp'
 IPFS_URL = "http://127.0.0.1:5001"

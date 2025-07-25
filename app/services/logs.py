@@ -36,22 +36,22 @@ def immutable_application_log(session, operation, page, message, ipns_log_key):
     try:
         resolve_cmd = f"ipfs name resolve --nocache -r {ipns_log_key}"
         resolve_proc = subprocess.run(resolve_cmd, shell=True, capture_output=True, text=True)
-
         if resolve_proc.returncode == 0:
-            latest_cid = resolve_proc.stdout.strip().replace('\n','')
+            latest_cid = resolve_proc.stdout.strip()
             cat_cmd = f"ipfs cat {latest_cid}"
             cat_proc = subprocess.run(cat_cmd, shell=True, capture_output=True, text=True)
             if cat_proc.returncode == 0:
                 try:
                     server_log_info = json.loads(cat_proc.stdout.strip())
-                except Exception:
-                    server_log_info = {}
+                except Exception as e:
+                    return False
             else:
-                server_log_info = {}
+                return False
         else:
-            server_log_info = {}
-    except Exception:
-        server_log_info = {}
+            return False
+
+    except Exception as e:
+        return False
 
     logs_array = []
     if server_ip in server_log_info:
@@ -61,36 +61,47 @@ def immutable_application_log(session, operation, page, message, ipns_log_key):
         if cat_proc.returncode == 0:
             try:
                 logs_array = json.loads(cat_proc.stdout.strip())
-            except Exception:
-                logs_array = []
+            except Exception as e:
+                return False
         else:
-            logs_array = []
+            return False
+
     logs_array.append(new_log_entry)
 
     with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmpfile:
         json.dump(logs_array, tmpfile)
         tmpfile.flush()
         tmp_logs_path = tmpfile.name
+
     add_logs_cmd = f"ipfs-cluster-ctl add -q {tmp_logs_path}"
     add_logs_proc = subprocess.run(add_logs_cmd, shell=True, capture_output=True, text=True)
-    new_log_cid = add_logs_proc.stdout.strip().replace('\n','')
+    if add_logs_proc.returncode != 0:
+        os.unlink(tmp_logs_path)
+        return False
+    new_log_cid = add_logs_proc.stdout.strip()
     os.unlink(tmp_logs_path)
 
     server_log_info[server_ip] = new_log_cid
+
     with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmpfile_info:
         json.dump(server_log_info, tmpfile_info)
         tmpfile_info.flush()
         tmp_info_path = tmpfile_info.name
+
     add_info_cmd = f"ipfs-cluster-ctl add -q {tmp_info_path}"
     add_info_proc = subprocess.run(add_info_cmd, shell=True, capture_output=True, text=True)
+    if add_info_proc.returncode != 0:
+        os.unlink(tmp_info_path)
+        return False
     new_server_log_info_cid = add_info_proc.stdout.strip()
     os.unlink(tmp_info_path)
 
     publish_cmd = f"ipfs name publish --key=logs {new_server_log_info_cid}"
-    subprocess.run(publish_cmd, shell=True, capture_output=True, text=True)
+    publish_proc = subprocess.run(publish_cmd, shell=True, capture_output=True, text=True)
+    if publish_proc.returncode != 0:
+        return False
 
-    return json.dumps({"status": True})
-
+    return True
 
 
 
