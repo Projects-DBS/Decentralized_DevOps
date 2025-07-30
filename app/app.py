@@ -115,7 +115,6 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 
 TEMP_DIR = '/tmp'
-IPFS_URL = "http://127.0.0.1:5001"
 
 def get_client_ip():
     x_forwarded_for = request.headers.get('X-Forwarded-For')
@@ -207,7 +206,6 @@ def cicd_page():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    immutable_application_log(session, "view_pipeline_operations", "ci-cd-operations", "View Pipeline operation visited.",ipns_key_logs)
     return render_template("cicd_operations.html")
 
 
@@ -227,7 +225,7 @@ def login():
             flash("Invalid password length. Must be 6-32 characters.")
             return redirect(url_for('login'))
 
-        ipfs_conn_status = ipfs_connect(IPFS_URL)
+        ipfs_conn_status = ipfs_connect()
 
         if ipfs_conn_status == True:
             try:
@@ -239,7 +237,7 @@ def login():
                     flash("Error to fetch IPFS Data.")
                     return redirect(url_for("login"))
                 access_control_cid = decrypt_openssl(user_access, password).decode()
-                access_info = get_document_ipfs_cid(access_control_cid, IPFS_URL)
+                access_info = get_document_ipfs_cid(access_control_cid)
                 session.permanent = True
                 session["username"] = access_info.get("username")
                 session["role"] = access_info.get("role")
@@ -295,15 +293,21 @@ def list_roles():
         if status != True:
             flash(status)
             return redirect(url_for("login"))
-        cmds = f"ipfs name resolve --nocache -r {ipns_key_roles}"
-        result = subprocess.run(cmds, shell=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_roles],
+            capture_output=True,
+            text=True
+        )
         if result.returncode != 0:
             return jsonify({"message":"Unable to retrieve roles from the IPNS Records."})
         role_cid = result.stdout.strip().replace('\n','')
 
         
-        cmd1 = f"ipfs cat {role_cid}"
-        result = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ["ipfs", "cat", role_cid],
+            capture_output=True,
+            text=True
+        )
         if result.returncode != 0:
             return jsonify({"message":"Unable to retrieve roles from the IPFS Cluster."})
         role_info = result.stdout.strip().replace('\n','')
@@ -318,7 +322,6 @@ def admin_dashboard():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    immutable_application_log(session, "view_admin_page", "admin_dashboard", "Login Success",ipns_key_logs)
 
     return render_template("admin_dashboard.html", username=session.get("username"))
 
@@ -328,7 +331,6 @@ def developer_dashboard():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    immutable_application_log(session, "view_developer_page", "developer_dashboard", "Login Success",ipns_key_logs)
 
     return render_template("developer_dashboard.html", username=session.get("username"))
 
@@ -338,7 +340,6 @@ def qa_dashboard():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    immutable_application_log(session, "view_qa_page", "qa_dashboard", "Login Success",ipns_key_logs)
     
     return render_template("qa_dashboard.html", username=session.get("username"))
 
@@ -348,7 +349,6 @@ def push_pull():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    immutable_application_log(session, "view_ipfs_repo_operation", "ipfs-repo-operation", "IPFS Operation Page listed.",ipns_key_logs)
     
     return render_template("ipfs-repo-operation.html")
 
@@ -358,7 +358,6 @@ def push_to_ipfs():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    immutable_application_log(session, "view_push_to_ipfs", "pushto_ipfs", "Push to IPFS page loaded.",ipns_key_logs)
     
     return render_template("pushto_ipfs.html")
 
@@ -368,7 +367,6 @@ def pull_from_ipfs():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    immutable_application_log(session, "view_pull_project", "pull_from_ipfs", "Project List Visited.",ipns_key_logs)
     
     return render_template("pullfrom_ipfs.html")
 
@@ -379,12 +377,20 @@ def get_projects():
         flash(status)
         return redirect(url_for("login"))
     try:
-        cmd = f"ipfs name resolve --nocache -r {ipns_key_projects}"
-        new_ipfs_output = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        new_ipfs_output = subprocess.run(
+            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_projects],
+            capture_output=True,
+            text=True
+        )
+
         resolved = new_ipfs_output.stdout.strip()
 
-        cmd1 = f"ipfs cat {resolved}"
-        data = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
+        data = subprocess.run(
+            ["ipfs", "cat", resolved],
+            capture_output=True,
+            text=True
+        )
+
         final_data = data.stdout.strip()
         json_data = json.loads(final_data)
         return jsonify(json_data)
@@ -398,12 +404,20 @@ def build_info():
     if status != True:
         flash(status)
         return redirect(url_for("login"))
-    cmd = f"ipfs name resolve --nocache -r {ipns_key_project_builds}"
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    result = subprocess.run(
+        ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_project_builds],
+        capture_output=True,
+        text=True
+    )
+
     result = result.stdout.strip().replace('\n','')
 
-    cmd1 = f"ipfs cat {result}"
-    result1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
+    result1 = subprocess.run(
+        ["ipfs", "cat", result],
+        capture_output=True,
+        text=True
+    )
+
     result1 = result1.stdout.strip().replace('\n','')
     json_result = json.loads(result1)
     return jsonify(json_result), 200
@@ -436,19 +450,25 @@ def decommission():
         for server in server_list:
             try:
                 stop_cmd = f'fuser -k {port}/tcp || true'
-                cmd = (
-                    f'sshpass -p "{deployment_server_password}" ssh -o StrictHostKeyChecking=no '
-                    f'guest@{server} "{stop_cmd}"'
-                )
-                stop_data = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                ssh_cmd = [
+                    "sshpass", "-p", deployment_server_password,
+                    "ssh", "-o", "StrictHostKeyChecking=no",
+                    f"guest@{server}",
+                    stop_cmd
+                ]
+                stop_data = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=30)
+
                 
                 project_dir = f"/home/guest/www/{tag}"
                 cleanup_cmd = f'rm -rf {project_dir}'
-                cleanup_full_cmd = (
-                    f'sshpass -p "{deployment_server_password}" ssh -o StrictHostKeyChecking=no '
-                    f'guest@{server} "{cleanup_cmd}"'
-                )
-                cleanup_data = subprocess.run(cleanup_full_cmd, shell=True, capture_output=True, text=True, timeout=30)
+                cleanup_full_cmd = [
+                    "sshpass", "-p", deployment_server_password,
+                    "ssh", "-o", "StrictHostKeyChecking=no",
+                    f"guest@{server}",
+                    cleanup_cmd
+                ]
+                cleanup_data = subprocess.run(cleanup_full_cmd, capture_output=True, text=True, timeout=30)
+
 
                 if cleanup_data.returncode == 0 and stop_data.returncode == 0:
                     success_servers.append(server)
@@ -519,24 +539,36 @@ def deploy():
 
         for server in server_list:
             try:
-                cmd = (
-                    f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
-                    f'"mkdir -p /home/guest/www/{tag}/{build_cid}/webapp/ && '
-                    f'ipfs get {build_cid} -o /home/guest/www/{tag}/{build_cid}/webapp/"'
+                remote_cmd = (
+                    f'mkdir -p /home/guest/www/{tag}/{build_cid}/webapp/ && '
+                    f'ipfs get {build_cid} -o /home/guest/www/{tag}/{build_cid}/webapp/'
                 )
-                data = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
+                cmd = [
+                    "sshpass", "-p", deployment_server_password,
+                    "ssh", "-o", "StrictHostKeyChecking=no",
+                    f"guest@{server}",
+                    remote_cmd
+                ]
+                data = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
                 if data.returncode != 0:
                     failed_servers.append({"server": server, "step": 1, "stderr": data.stderr.strip()})
                     continue
 
-                cmd1 = (
-                    f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
-                    f'"openssl enc -d -aes-256-cbc -pbkdf2 '
+                remote_cmd = (
+                    f'openssl enc -d -aes-256-cbc -pbkdf2 '
                     f'-in /home/guest/www/{tag}/{build_cid}/webapp/{build_cid} '
                     f'-out /home/guest/www/{tag}/{build_cid}/webapp/{build_cid}.zip '
-                    f'-pass pass:{artifact_password}"'
+                    f'-pass pass:{artifact_password}'
                 )
-                data1 = subprocess.run(cmd1, shell=True, capture_output=True, text=True, timeout=60)
+                cmd1 = [
+                    "sshpass", "-p", deployment_server_password,
+                    "ssh", "-o", "StrictHostKeyChecking=no",
+                    f"guest@{server}",
+                    remote_cmd
+                ]
+                data1 = subprocess.run(cmd1, capture_output=True, text=True, timeout=60)
+
                 if data1.returncode != 0:
                     if "bad decrypt" in data1.stderr or "bad password" in data1.stderr:
                         return jsonify({"status": "failed", "message": "Incorrect password for the artifact!"})
@@ -553,19 +585,26 @@ def deploy():
                     f'sleep 3; '
                     f'(ss -ltn | grep ":{port} " || netstat -ltn 2>/dev/null | grep ":{port} ") && echo "__DEPLOY_SUCCESS__"'
                 )
-                cmd2 = (
-                    f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} "{run_command}"'
-                )
-                data2 = subprocess.run(cmd2, shell=True, capture_output=True, text=True, timeout=90)
+                cmd2 = [
+                    "sshpass", "-p", deployment_server_password,
+                    "ssh", "-o", "StrictHostKeyChecking=no",
+                    f"guest@{server}",
+                    run_command
+                ]
+                data2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=90)
+
 
                 if "__DEPLOY_SUCCESS__" in data2.stdout:
                     success_servers.append(server)
                 else:
-                    log_cmd = (
-                        f'sshpass -p {deployment_server_password} ssh -o StrictHostKeyChecking=no guest@{server} '
-                        f'"tail -n 50 {project_dir}/app.log 2>/dev/null"'
-                    )
-                    log_data = subprocess.run(log_cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    log_cmd = [
+                        "sshpass", "-p", deployment_server_password,
+                        "ssh", "-o", "StrictHostKeyChecking=no",
+                        f"guest@{server}",
+                        f"tail -n 50 {project_dir}/app.log 2>/dev/null"
+                    ]
+                    log_data = subprocess.run(log_cmd, capture_output=True, text=True, timeout=10)
+
                     failed_servers.append({
                         "server": server,
                         "step": 3,
@@ -651,8 +690,12 @@ def available_servers():
     try:
        
 
-        cmd = 'ipfs-cluster-ctl peers ls'
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ['ipfs-cluster-ctl', 'peers', 'ls'],
+            capture_output=True,
+            text=True
+        )
+
         ip_list = re.findall(r'/ip4/([0-9.]+)', result.stdout)
         unique_ips = sorted(set(ip for ip in ip_list if not ip.startswith('127.')))
 
@@ -703,7 +746,7 @@ def download_project():
                 else:
                     return jsonify({'error': dec_result.stderr.strip() or "Decryption failed"}), 500
 
-            immutable_application_log(session, "download_project", "pull_from_ipfs", "Downloading the Project.",ipns_key_logs)
+            immutable_application_log(session, "download_project", "pull_from_ipfs", "Download the Project.",ipns_key_logs)
             
                 
             return send_file(
@@ -724,12 +767,20 @@ def get_all_projects():
         flash(status)
         return redirect(url_for("login"))
     try:
-        cmd = f"ipfs name resolve --nocache -r {ipns_key_projects}"
-        new_ipfs_output = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        new_ipfs_output = subprocess.run(
+            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_projects],
+            capture_output=True,
+            text=True
+        )
+
         resolved = new_ipfs_output.stdout.strip()
 
-        cmd1 = f"ipfs cat {resolved}"
-        data = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
+        data = subprocess.run(
+            ["ipfs", "cat", resolved],
+            capture_output=True,
+            text=True
+        )
+
         final_data = data.stdout.strip()
         json_data = json.loads(final_data)
         return jsonify(json_data.get('projects', []))
@@ -767,13 +818,23 @@ def trigger_ci_build():
         dec_zip_path = os.path.join(tmpdir, f"{cid}.zip")
         extract_dir = os.path.join(tmpdir, "extracted")
 
-        cmd = f'ipfs get {cid} -o "{enc_zip_path}"'
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ["ipfs", "get", cid, "-o", enc_zip_path],
+            capture_output=True,
+            text=True
+        )
+
         if result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to retrieve the requested project from CID for build."})
 
-        dec_cmd = f'openssl enc -d -aes-256-cbc -pbkdf2 -in "{enc_zip_path}" -out "{dec_zip_path}" -pass pass:{project_zip_password}'
-        dec_result = subprocess.run(dec_cmd, shell=True, capture_output=True, text=True)
+        dec_cmd = [
+            "openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2",
+            "-in", enc_zip_path,
+            "-out", dec_zip_path,
+            "-pass", f"pass:{project_zip_password}"
+        ]
+        dec_result = subprocess.run(dec_cmd, capture_output=True, text=True)
+
         if dec_result.returncode != 0:
             return jsonify({"success": False, "message": "Decryption failed. Wrong project password or corrupt file."})
 
@@ -799,25 +860,43 @@ def trigger_ci_build():
         zip_path = os.path.join(root, f"{cid}_build.zip")
         enc_build_path = os.path.join(root, f"{cid}_build.zip.enc")
 
-        enc = f'openssl enc -aes-256-cbc -pbkdf2 -salt -in "{zip_path}" -out "{enc_build_path}" -pass pass:{build_zip_password}'
-        result = subprocess.run(enc, shell=True, capture_output=True, text=True)
+        enc = [
+            "openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-salt",
+            "-in", zip_path,
+            "-out", enc_build_path,
+            "-pass", f"pass:{build_zip_password}"
+        ]
+        result = subprocess.run(enc, capture_output=True, text=True)
+
         if result.returncode != 0:
             return jsonify({"success": False, "message": "Encrypting the build failed!"})
 
-        cmd = f'ipfs-cluster-ctl add -q "{enc_build_path}"'
-        ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        ipfs_result = subprocess.run(
+            ["ipfs-cluster-ctl", "add", "-q", enc_build_path],
+            capture_output=True,
+            text=True
+        )
+
         if ipfs_result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
         new_cid = ipfs_result.stdout.strip()
 
-        cmd = f'ipfs name resolve --nocache -r {ipns_key_project_builds}'
-        resolve_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        resolve_result = subprocess.run(
+            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_project_builds],
+            capture_output=True,
+            text=True
+        )
+
         if resolve_result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to resolve the IPNS Key for latest CID."})
         current_builds_cid = resolve_result.stdout.strip()
 
-        cat_cmd = f'ipfs cat {current_builds_cid}'
-        cat_result = subprocess.run(cat_cmd, shell=True, capture_output=True, text=True)
+        cat_result = subprocess.run(
+            ["ipfs", "cat", current_builds_cid],
+            capture_output=True,
+            text=True
+        )
+
         if cat_result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to read the build records from IPNS and IPFS."})
 
@@ -853,21 +932,29 @@ def trigger_ci_build():
             json.dump(builds_data, tmpf, indent=2)
             tmpf_path = tmpf.name
 
-        cmd = f'ipfs-cluster-ctl add -q "{tmpf_path}"'
-        ipfs_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        ipfs_result = subprocess.run(
+            ["ipfs-cluster-ctl", "add", "-q", tmpf_path],
+            capture_output=True,
+            text=True
+        )
+
         if ipfs_result.returncode != 0:
             os.remove(tmpf_path)
             return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
 
         updated_cid = ipfs_result.stdout.strip()
 
-        cmd = f'ipfs name publish --key=project_builds {updated_cid}'
-        publish_result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        publish_result = subprocess.run(
+            ["ipfs", "name", "publish", "--key=project_builds", updated_cid],
+            capture_output=True,
+            text=True
+        )
+
         os.remove(tmpf_path)
         if publish_result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to publish the new build info to IPNS."})
 
-        immutable_application_log(session, "trigger_ci", "trigger-ci", "Build trigger",ipns_key_logs)
+        immutable_application_log(session, "trigger_ci", "trigger-ci", "Build triggered",ipns_key_logs)
         
             
         return jsonify({
@@ -948,145 +1035,219 @@ def reg_parameters_pages():
     
 
 
-
-
-
-
-
-
-
 @app.route("/register", methods=['POST'])
 def register():
-    status = check_session( session,"user_management")
+    status = check_session(session, "user_management")
     if status != True:
         flash(status)
         return jsonify({"success": False, "message": status}), 401
+
     data = request.get_json()
     public_key = data.get('public_key')
-    public_key = str(public_key).replace('\n','').replace('\r','')
+    if not public_key:
+        return jsonify({"success": False, "message": "Public key missing"}), 400
 
+    public_key = str(public_key).replace('\n', '').replace('\r', '')
 
-    cmd01 = f"ipfs name resolve --nocache -r {ipns_key_userpublickey}"
-    res01 = subprocess.run(cmd01, shell=True, capture_output=True, text=True)
-    res01 = res01.stdout.strip().replace('\n','')
+    # Resolve current IPNS public key record
+    res01 = subprocess.run(
+        ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_userpublickey],
+        capture_output=True,
+        text=True
+    )
+    if res01.returncode != 0:
+        return jsonify({"success": False, "message": "Failed to resolve IPNS public key."}), 500
 
-    cmd02 = f'ipfs cat {res01}'
-    res02 = subprocess.run(cmd02, shell=True, capture_output=True, text=True)
-    res02 = res02.stdout.strip().replace('\n','').replace('\r','')
-    ipns_pubkey_record = json.loads(res02)
-    
+    cid = res01.stdout.strip()
 
-    ipns_pubkey_record["records"].append(public_key)
+    # Get the public key record from IPFS
+    res02 = subprocess.run(
+        ["ipfs", "cat", cid],
+        capture_output=True,
+        text=True
+    )
+    if res02.returncode != 0:
+        return jsonify({"success": False, "message": "Failed to fetch public key record."}), 500
+
+    ipns_pubkey_record_str = res02.stdout.strip().replace('\n', '').replace('\r', '')
+
+    try:
+        ipns_pubkey_record = json.loads(ipns_pubkey_record_str)
+    except Exception:
+        return jsonify({"success": False, "message": "Invalid JSON in public key record."}), 500
+
+    ipns_pubkey_record.setdefault("records", []).append(public_key)
 
     json_string = json.dumps(ipns_pubkey_record)
 
-    with tempfile.NamedTemporaryFile(delete=False, mode='w') as tmp:
-        tmp.write(json_string)
-        tmp_paths = tmp.name
+    # Save updated public key record to temp file
+    with tempfile.NamedTemporaryFile(delete=False, mode='w') as tmp_pubkey_file:
+        tmp_pubkey_file.write(json_string)
+        tmp_pubkey_path = tmp_pubkey_file.name
 
-    cmd03 = f'ipfs-cluster-ctl add -q {tmp_paths}'
-    res03 = subprocess.run(cmd03, shell=True, capture_output=True, text=True)
-    res03 = res03.stdout.strip().replace('\n','')
-
-    cmd04 = f'ipfs name publish --key=user_publickey {res03}'
-    res04 = subprocess.run(cmd04, shell=True, capture_output=True, text=True)
-    if res04.returncode != 0:
-        return jsonify({"success": False, "message": "Unable to register the public key."}), 400
-
-    formatted = {
-        "username": data.get('username', ''),
-        "first_name": data.get('first_name', ''),
-        "last_name": data.get('last_name', ''),
-        "role": data.get('role', ''),
-        "organization": data.get('organization',''), 
-        "email": data.get('email', ''),
-        "contact": data.get('contact', ''),
-        "operations": data.get('operations', []),
-        "pages": data.get('page_access', [])
-    }
-    password = data.get('password','')
-
-    with tempfile.NamedTemporaryFile('w', delete=False) as tmp:
-        json.dump(formatted, tmp, indent=2)
-        tmp.flush()
-        tmp_path = tmp.name
-
-
-    
     try:
-        result = subprocess.run(['ipfs', 'add', tmp_path, '-q'], capture_output=True, text=True)
+        # Add updated public key record to IPFS cluster
+        res03 = subprocess.run(
+            ["ipfs-cluster-ctl", "add", "-q", tmp_pubkey_path],
+            capture_output=True,
+            text=True
+        )
+        if res03.returncode != 0:
+            return jsonify({"success": False, "message": "Failed to add public key record."}), 500
+
+        cid = res03.stdout.strip()
+
+        # Publish updated public key record under IPNS key
+        res04 = subprocess.run(
+            ["ipfs", "name", "publish", "--key=user_publickey", cid],
+            capture_output=True,
+            text=True
+        )
+        if res04.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to register the public key."}), 400
+
+        # Prepare user data for registration
+        formatted = {
+            "username": data.get('username', ''),
+            "first_name": data.get('first_name', ''),
+            "last_name": data.get('last_name', ''),
+            "role": data.get('role', ''),
+            "organization": data.get('organization', ''),
+            "email": data.get('email', ''),
+            "contact": data.get('contact', ''),
+            "operations": data.get('operations', []),
+            "pages": data.get('page_access', [])
+        }
+        password = data.get('password', '')
+        if not password:
+            return jsonify({"success": False, "message": "Password missing."}), 400
+
+        # Write user info JSON to temp file
+        with tempfile.NamedTemporaryFile('w', delete=False) as tmp_user_file:
+            json.dump(formatted, tmp_user_file, indent=2)
+            tmp_user_file.flush()
+            tmp_user_path = tmp_user_file.name
+
+        # Add user info JSON to IPFS
+        result = subprocess.run(['ipfs', 'add', tmp_user_path, '-q'], capture_output=True, text=True)
+        if result.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to register the user."}), 500
+
         cid = result.stdout.strip()
 
-        if result.returncode != 0 or not cid:
-            return jsonify({"success": False, "message": "Unable to register the user."})
-        cmd = f'echo -n {cid} | openssl enc -aes-256-cbc -a -salt -pbkdf2 -pass pass:{password}'
-        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        encrypted_info = res.stdout.strip()
+        # Encrypt the CID using OpenSSL with the user's password
+        echo_proc = subprocess.Popen(
+            ['echo', '-n', cid],
+            stdout=subprocess.PIPE
+        )
+        openssl_proc = subprocess.Popen(
+            ['openssl', 'enc', '-aes-256-cbc', '-a', '-salt', '-pbkdf2', '-pass', f'pass:{password}'],
+            stdin=echo_proc.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        echo_proc.stdout.close()  # Allow echo_proc to receive SIGPIPE if openssl_proc exits
+
+        out, err = openssl_proc.communicate()
+        if openssl_proc.returncode != 0:
+            raise RuntimeError(f"OpenSSL encoding failed: {err.strip()}")
+
+        encrypted_info = out.strip()
 
         username = data.get('username', '')
-        access_control = {
-            username : encrypted_info
-        }
+        access_control = {username: encrypted_info}
 
+        # Resolve latest access control IPNS record
+        res = subprocess.run(
+            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_access_control],
+            capture_output=True,
+            text=True
+        )
+        if res.returncode != 0:
+            return jsonify({"success": False, "message": "Failed to resolve access control record."}), 500
 
-
-        cmd = f'ipfs name resolve --nocache -r {ipns_key_access_control}'
-        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         latest_cid = res.stdout.strip()
 
+        # Fetch the current access control JSON
+        res = subprocess.run(
+            ["ipfs", "cat", latest_cid],
+            capture_output=True,
+            text=True
+        )
+        if res.returncode != 0:
+            return jsonify({"success": False, "message": "Failed to fetch access control record."}), 500
 
-        cmd = f'ipfs cat {latest_cid}'
-        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        latest_record = res.stdout.strip().replace('\n', '')
+        latest_record_str = res.stdout.strip().replace('\n', '')
 
+        datas = json.loads(latest_record_str)
 
-        
-        datas = json.loads(latest_record)
-        
-        username = data.get('username', '')
+        # Check for existing username
         existing_user = False
-
         if "access_control" in datas and isinstance(datas["access_control"], list):
             for entry in datas["access_control"]:
-                if isinstance(entry, dict):
-                    if username in entry:
-                        existing_user = True
-                        break
-        if existing_user:
-             return jsonify({"success": False, "message": f"Username '{username}' already exists."}), 400
+                if isinstance(entry, dict) and username in entry:
+                    existing_user = True
+                    break
 
+        if existing_user:
+            return jsonify({"success": False, "message": f"Username '{username}' already exists."}), 400
+
+        # Add new access control entry
         if "access_control" in datas and isinstance(datas["access_control"], list):
             datas["access_control"].append(access_control)
-
         else:
-            datas["access_control"] = [formatted]
+            datas["access_control"] = [access_control]
+
         updated_json_str = json.dumps(datas, indent=2)
 
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as tmp_file:
-            tmp_file.write(updated_json_str)
-            tmp_file_path = tmp_file.name
-        ipfs_add_cmd = f"ipfs-cluster-ctl add {tmp_file_path} -q"
-        new_ipfs_output = subprocess.run(ipfs_add_cmd, shell=True, capture_output=True, text=True)
-        new_ipfs_output = new_ipfs_output.stdout.strip()
+        # Write updated access control JSON to temp file
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as tmp_acc_file:
+            tmp_acc_file.write(updated_json_str)
+            tmp_acc_file_path = tmp_acc_file.name
 
-
-
-        cmd_publish = f"ipfs name publish --key=access_control {new_ipfs_output}"
-        new_ipfs_output = subprocess.run(cmd_publish, shell=True, capture_output=True, text=True)
+        # Add updated access control JSON to IPFS cluster
+        new_ipfs_output = subprocess.run(
+            ["ipfs-cluster-ctl", "add", tmp_acc_file_path, "-q"],
+            capture_output=True,
+            text=True
+        )
         if new_ipfs_output.returncode != 0:
-            return jsonify({"success": False, "message": "Unable to register the user. IPNS publish error. Contact Amdin."}), 500
-        immutable_application_log(session, "user_registration", "user-management", f"New user was registered.",ipns_key_logs)
-        
-            
+            return jsonify({"success": False, "message": "Failed to add updated access control file."}), 500
+
+        new_cid = new_ipfs_output.stdout.strip()
+
+        # Publish updated access control record
+        publish_res = subprocess.run(
+            ["ipfs", "name", "publish", "--key=access_control", new_cid],
+            capture_output=True,
+            text=True
+        )
+        if publish_res.returncode != 0:
+            return jsonify({"success": False, "message": "Unable to register the user. IPNS publish error. Contact Admin."}), 500
+
+        # Log the registration event
+        immutable_application_log(session, "user_registration", "user-management", f"New user was registered.", ipns_key_logs)
+
         return jsonify({"success": True, "message": "Registration complete."}), 200
-        
-    except:
-        return jsonify({"success": False, "message": "Unable to register the user."}), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Unable to register the user. Error: {str(e)}"}), 500
 
     finally:
-        import os
-        os.remove(tmp_path)
-    
+        # Cleanup temp files safely
+        for path in [tmp_pubkey_path, tmp_user_path, tmp_acc_file_path]:
+            try:
+                if path and os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+
+
+
+
+
+
 
 @app.errorhandler(413)
 def too_large(e):
@@ -1107,7 +1268,6 @@ def pushto_ipfs():
     if not access_info:
         return jsonify(success=False, error="Session invalid, please re-login."), 401
     
-    immutable_application_log(session, "push_project", "pushto_ipfs", "Push Project Inititated",ipns_key_logs)
     
 
     f = request.files.get('zipfile')
@@ -1124,18 +1284,49 @@ def pushto_ipfs():
     f.save(zip_path)
 
     enc_zip_path = zip_path + ".enc"
-    enc_cmd = f'openssl enc -aes-256-cbc -pbkdf2 -salt -in "{zip_path}" -out "{enc_zip_path}" -pass pass:{zip_password}'
-    enc_res = subprocess.run(enc_cmd, shell=True, capture_output=True, text=True)
+    enc_cmd = [
+        "openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-salt",
+        "-in", zip_path,
+        "-out", enc_zip_path,
+        "-pass", f"pass:{zip_password}"
+    ]
+    enc_res = subprocess.run(enc_cmd, capture_output=True, text=True)
+
     if enc_res.returncode != 0:
         return jsonify(success=False, error="Encryption failed: " + enc_res.stderr.strip()), 500
 
     try:
-        cmd = f'ipfs-cluster-ctl add "{enc_zip_path}" | tail -n1 | cut -d" " -f2'
-        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        if res.returncode != 0:
-            return jsonify(success=False, error=res.stderr.strip()), 500
+        p1 = subprocess.Popen(
+            ["ipfs-cluster-ctl", "add", enc_zip_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        p2 = subprocess.Popen(
+            ["tail", "-n1"],
+            stdin=p1.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        p1.stdout.close()
 
-        new_cid = res.stdout.strip()
+        p3 = subprocess.Popen(
+            ["cut", "-d", " ", "-f2"],
+            stdin=p2.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        p2.stdout.close()
+
+        out, err = p3.communicate()
+
+        if p1.wait() != 0 or p2.wait() != 0 or p3.returncode != 0:
+            return jsonify(success=False, error=err.strip()), 500
+
+        new_cid = out.strip()
+
 
 
         project_name, _ = os.path.splitext(filename)
