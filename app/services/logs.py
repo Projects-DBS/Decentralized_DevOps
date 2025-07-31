@@ -134,7 +134,7 @@ def immutable_application_log(session, operation, page, message, ipns_log_key):
 
     # --- Step 7: Publish the updated CID to IPNS using the correct key ---
     publish_proc = subprocess.run(
-        ['ipfs', 'name', 'publish', f'--key=logs', new_server_log_info_cid],
+        ['ipfs', 'name', 'publish', f'--key=logs', '--lifetime=17520h', new_server_log_info_cid],
         capture_output=True, text=True, check=False
     )
     if publish_proc.returncode != 0:

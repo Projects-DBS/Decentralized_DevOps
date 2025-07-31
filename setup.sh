@@ -74,7 +74,7 @@ sudo -u "${APP_USERNAME}" bash -c "
   json_data=\$(jq -n --arg admin \"\$encrypted\" '{\"access_control\": [{\"admin\":\$admin}]}')
   echo \"\$json_data\" > ${HOME_DIR}/db.json
   dbcid=\$(ipfs-cluster-ctl add -q ${HOME_DIR}/db.json)
-  ipns_output=\$(ipfs name publish --key=\"access_control\" /ipfs/\$dbcid)
+  ipns_output=\$(ipfs name publish --key=\"access_control\" --lifetime=17520h /ipfs/\$dbcid)
   ipns_key=\$(echo \"\$ipns_output\" | awk '{print \$3}' | cut -d\":\" -f1)
   rm ${HOME_DIR}/db.json
 "
@@ -88,7 +88,7 @@ sudo -u "${APP_USERNAME}" bash -c '
   cid=$(ipfs-cluster-ctl add -q "$tmpfile")
 
   # Publish the CID to IPNS with the "projects" key
-  ipns_output=$(ipfs name publish --key="projects" /ipfs/"$cid")
+  ipns_output=$(ipfs name publish --key="projects" --lifetime=17520h /ipfs/"$cid")
   ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
 
   rm "$tmpfile"
@@ -117,7 +117,7 @@ EOF
   fi
 
   # Publish the CID to IPNS with the "projects" key
-  ipns_output=$(ipfs name publish --key="roles" /ipfs/"$cid")
+  ipns_output=$(ipfs name publish --key="roles" --lifetime=17520h /ipfs/"$cid")
   if [ $? -ne 0 ]; then
     echo "Error: IPNS publish failed."
     rm "$tmpfile"
@@ -142,7 +142,7 @@ sudo -u "${APP_USERNAME}" bash -c "
     exit 1
   fi
 
-  ipns_output=\$(ipfs name publish --key=\"user_publickey\" /ipfs/\"\$cid\")
+  ipns_output=\$(ipfs name publish --key=\"user_publickey\" --lifetime=17520h /ipfs/\"\$cid\")
   if [ \$? -ne 0 ]; then
     echo \"Error: IPNS publish failed.\"
     rm \"\$tmpfile\"
@@ -166,7 +166,7 @@ sudo -u "${APP_USERNAME}" bash -c '
   cid=$(ipfs-cluster-ctl add -q "$tmpfile")
 
   # Publish the CID to IPNS with the "project_builds" key
-  ipns_output=$(ipfs name publish --key="project_builds" /ipfs/"$cid")
+  ipns_output=$(ipfs name publish --key="project_builds" --lifetime=17520h /ipfs/"$cid")
   ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
 
   rm "$tmpfile"
@@ -180,7 +180,7 @@ sudo -u "${APP_USERNAME}" bash -c '
 
   cid=$(ipfs-cluster-ctl add -q "$tmpfile")
 
-  ipns_output=$(ipfs name publish --key="logs" /ipfs/"$cid")
+  ipns_output=$(ipfs name publish --key="logs" --lifetime=17520h /ipfs/"$cid")
   ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
 
   rm "$tmpfile"
@@ -193,7 +193,7 @@ sudo -u "${APP_USERNAME}" bash -c '
 
   cid=$(ipfs-cluster-ctl add -q "$tmpfile")
 
-  ipns_output=$(ipfs name publish --key="misc" /ipfs/"$cid")
+  ipns_output=$(ipfs name publish --key="misc" --lifetime=17520h /ipfs/"$cid")
   ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
 
   rm "$tmpfile"
