@@ -184,7 +184,7 @@ def remove_user():
         if username == "admin" or username == "Admin":
             return jsonify({"success": False, "message": "You cannot remove admin from the Access."})
 
-        success, message = remove_user_info(ipns_key_access_control, username)
+        success, message = remove_user_info(ipns_key_access_control, username, ipns_key_userpublickey)
         if success != True:
             return jsonify({"success": success, "message": message})
 
@@ -945,7 +945,7 @@ def trigger_ci_build():
         updated_cid = ipfs_result.stdout.strip()
 
         publish_result = subprocess.run(
-            ["ipfs", "name", "publish", "--key=project_builds", updated_cid],
+            ["ipfs", "name", "publish", "--key=project_builds", '--lifetime=17520h', updated_cid],
             capture_output=True,
             text=True
         )
@@ -1031,7 +1031,6 @@ def reg_parameters_pages():
 
 
 
-
     
 
 
@@ -1049,6 +1048,11 @@ def register():
 
     public_key = str(public_key).replace('\n', '').replace('\r', '')
 
+    pub_key_info_check = str(public_key).replace('\n', '').replace('\r', '').strip()
+    uname = data.get('username', '')
+    if not pub_key_info_check.endswith(' ' + uname):
+        return jsonify({"success": False, "message": "Username does not match comment in public key"}), 400
+    
     # Resolve current IPNS public key record
     res01 = subprocess.run(
         ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_userpublickey],
@@ -1099,7 +1103,7 @@ def register():
 
         # Publish updated public key record under IPNS key
         res04 = subprocess.run(
-            ["ipfs", "name", "publish", "--key=user_publickey", cid],
+            ["ipfs", "name", "publish", "--key=user_publickey", '--lifetime=17520h', cid],
             capture_output=True,
             text=True
         )
@@ -1219,7 +1223,7 @@ def register():
 
         # Publish updated access control record
         publish_res = subprocess.run(
-            ["ipfs", "name", "publish", "--key=access_control", new_cid],
+            ["ipfs", "name", "publish", "--key=access_control", '--lifetime=17520h', new_cid],
             capture_output=True,
             text=True
         )

@@ -50,7 +50,7 @@ def ipfs_connect():
 
 
 
-def remove_user_info(ipns_access_control_key, username):
+def remove_user_info(ipns_access_control_key, username, ipns_publickey):
     try:
         resolved = subprocess.run(
             ['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_access_control_key],
@@ -94,15 +94,21 @@ def remove_user_info(ipns_access_control_key, username):
 
         new_cid = add.stdout.strip()
         publish = subprocess.run(
-            ['ipfs', 'name', 'publish', new_cid, f'--key={ipns_access_control_key}'],
+            ['ipfs', 'name', 'publish', f'--key={ipns_access_control_key}', '--lifetime=17520h', new_cid],
             capture_output=True, text=True
         )
         if publish.returncode != 0:
             return False, "Failed to publish to IPNS"
-
+        
+        st, ms = remove_user_pubkey(ipns_publickey ,username)
+        if st == False:
+            return st, ms
         return True, f"User removed."
     except Exception as e:
         return False, str(e)
+
+
+
 
 def remove_user_pubkey(ipns_user_pubkey_key, username):
     try:
@@ -111,29 +117,31 @@ def remove_user_pubkey(ipns_user_pubkey_key, username):
             capture_output=True, text=True
         )
         if resolved.returncode != 0:
-            return False, "Failed to resolve IPNS"
+            return False, "Failed to resolve IPNS for updating the Public Key"
 
         cid = resolved.stdout.strip()
         data = subprocess.run(
             ['ipfs', 'cat', cid], capture_output=True, text=True
         )
         if data.returncode != 0:
-            return False, "Failed to fetch data from IPFS"
+            return False, "Failed to fetch data from IPFS for Public Key"
 
         info = json.loads(data.stdout)
-        ac = info.get("records", [])
+        records = info.get("records", [])
         found = False
-        updated = []
-        for entry in ac:
-            if username in entry:
-                found = True
-                entry.pop(username)
-            if entry:
-                updated.append(entry)
-        if not found:
-            return False, "Username not found"
 
-        info["records"] = updated
+        updated_records = []
+        for pubkey in records:
+            pubkey_stripped = pubkey.strip()
+            if pubkey_stripped.split()[-1] == username:
+                found = True
+            else:
+                updated_records.append(pubkey)
+
+        if not found:
+            return True, "Pubkey not exists."
+
+        info["records"] = updated_records
 
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
             json.dump(info, tmp)
@@ -144,19 +152,22 @@ def remove_user_pubkey(ipns_user_pubkey_key, username):
         )
         os.unlink(tmp_path)
         if add.returncode != 0:
-            return False, "Failed to add updated data to IPFS"
+            return False, "Failed to add updated data to IPFS for Public Key."
 
         new_cid = add.stdout.strip()
         publish = subprocess.run(
-            ['ipfs', 'name', 'publish', new_cid, f'--key={ipns_user_pubkey_key}'],
+            ['ipfs', 'name', 'publish', '--lifetime=17520h', f'--key={ipns_user_pubkey_key}', new_cid],
             capture_output=True, text=True
         )
         if publish.returncode != 0:
-            return False, "Failed to publish to IPNS"
+            return False, "Failed to publish to IPNS for Public Key."
 
-        return True, f"User removed."
+        return True, "Pubkey Removed."
     except Exception as e:
         return False, str(e)
+
+
+
 
 def list_all_users(ipns_key_access_control):
     resolve = subprocess.run(['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_key_access_control], capture_output=True, text=True)
@@ -254,7 +265,7 @@ def update_project_record(new_cid, version, ipns_key_projects, project_name, acc
     if not new_ipfs_output:
         return False
 
-    cmd_publish = ['ipfs', 'name', 'publish', '--key=' + ipns_key_projects, new_ipfs_output]
+    cmd_publish = ['ipfs', 'name', 'publish', '--key=' + ipns_key_projects, '--lifetime=17520h', new_ipfs_output]
     publish_output = run_cmd(cmd_publish)
 
     if not publish_output:
@@ -314,7 +325,7 @@ def update_repo_ipnss(new_cid, version, ipns_cid, project_name, access_infos):
     if not new_ipfs_output or new_ipfs_output[0] is False:
         return False
 
-    cmd_publish = ['ipfs', 'name', 'publish', '--key=' + ipns_key, new_ipfs_output[0]]
+    cmd_publish = ['ipfs', 'name', 'publish', '--key=' + ipns_key, '--lifetime=17520h',new_ipfs_output[0]]
     publish_output = run_cmd(cmd_publish)
 
     if not publish_output or publish_output[0] is False:
