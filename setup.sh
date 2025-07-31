@@ -4,7 +4,7 @@ set -e
 APP_USERNAME="${APP_USERNAME:-guest}"
 PASSWORD="${PASSWORD:-guestpass}"
 CLUSTER_SECRET="${CLUSTER_SECRET:-changeme}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-changeme}"
+# ADMIN_PASSWORD="${ADMIN_PASSWORD:-changeme}"
 SWARM_KEY="${SWARM_KEY:-changeme}"
 HOME_DIR="/home/${APP_USERNAME}"
 
@@ -62,22 +62,36 @@ fi
 sudo -u "${APP_USERNAME}" ipfs-cluster-service daemon &
 sleep 10
 
-mkdir -p "${HOME_DIR}/admin"
-if [ ! -f "${HOME_DIR}/admin/admin_auth.json" ]; then
-  cp /tmp/admin_auth.json "${HOME_DIR}/admin/admin_auth.json"
-  chown "${APP_USERNAME}:${APP_USERNAME}" "${HOME_DIR}/admin/admin_auth.json"
-fi
+# mkdir -p "${HOME_DIR}/admin"
+# if [ ! -f "${HOME_DIR}/admin/admin_auth.json" ]; then
+#   cp /tmp/admin_auth.json "${HOME_DIR}/admin/admin_auth.json"
+#   chown "${APP_USERNAME}:${APP_USERNAME}" "${HOME_DIR}/admin/admin_auth.json"
+# fi
+
 
 sudo -u "${APP_USERNAME}" bash -c "
-  cid=\$(ipfs-cluster-ctl add -q ${HOME_DIR}/admin/admin_auth.json)
-  encrypted=\$(echo -n \"\$cid\" | openssl enc -aes-256-cbc -a -salt -pbkdf2 -pass pass:\"${ADMIN_PASSWORD}\")
-  json_data=\$(jq -n --arg admin \"\$encrypted\" '{\"access_control\": [{\"admin\":\$admin}]}')
+
+  cid=\$(ipfs-cluster-ctl add -q /tmp/admin_auth.enc)
+
+
+  # Create access control JSON with encrypted CID
+  json_data=\$(jq -n --arg admin \"\$cid\" '{\"access_control\": [{\"admin\":\$admin}]}')
+
   echo \"\$json_data\" > ${HOME_DIR}/db.json
+
+  # Add access control JSON to IPFS cluster
   dbcid=\$(ipfs-cluster-ctl add -q ${HOME_DIR}/db.json)
+
+  # Publish IPNS record for access control key
   ipns_output=\$(ipfs name publish --key=\"access_control\" --lifetime=17520h /ipfs/\$dbcid)
+
   ipns_key=\$(echo \"\$ipns_output\" | awk '{print \$3}' | cut -d\":\" -f1)
-  rm ${HOME_DIR}/db.json
+
+  # Clean up temporary files
+  rm ${HOME_DIR}/db.json /tmp/admin_auth.enc
 "
+
+
 
 sudo -u "${APP_USERNAME}" bash -c '
   # Create a temporary file for the JSON

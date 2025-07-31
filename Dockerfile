@@ -3,18 +3,17 @@ FROM ubuntu:22.04
 ARG APP_USERNAME
 ARG PASSWORD
 ARG CLUSTER_SECRET
-ARG ADMIN_PASSWORD
+# ARG ADMIN_PASSWORD
 ARG SWARM_KEY
 
 ENV APP_USERNAME=${APP_USERNAME}
 ENV PASSWORD=${PASSWORD}
 ENV CLUSTER_SECRET=${CLUSTER_SECRET}
-ENV ADMIN_PASSWORD=${ADMIN_PASSWORD}
 ENV SWARM_KEY=${SWARM_KEY}
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-COPY decentralized_ssh_auth.sh /usr/local/bin/decentralized_ssh_auth.sh
+COPY configs/decentralized_ssh_auth.sh /usr/local/bin/decentralized_ssh_auth.sh
 RUN chmod +x /usr/local/bin/decentralized_ssh_auth.sh
 
 
@@ -47,13 +46,13 @@ RUN wget https://dist.ipfs.tech/ipfs-cluster-ctl/v1.1.4/ipfs-cluster-ctl_v1.1.4_
     mv ipfs-cluster-ctl/ipfs-cluster-ctl /usr/local/bin/
 
 COPY setup.sh /setup.sh
-COPY admin_auth.json /tmp/admin_auth.json
+COPY configs/admin_auth.enc /tmp/admin_auth.enc
 
 COPY app /home/${APP_USERNAME}/app/
 
 COPY ipns_keys /home/${APP_USERNAME}/ipns_keys/
 
-COPY admin.pub /admin.pub
+COPY configs/admin.pub /admin.pub
 RUN chown -R ${APP_USERNAME}:${APP_USERNAME} /home/${APP_USERNAME} /admin.pub
 
 
