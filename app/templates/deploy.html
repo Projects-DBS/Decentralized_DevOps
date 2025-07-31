@@ -3,370 +3,246 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server Management Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>CD Trigger - DCICD</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100 p-6">
-    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
-        <h1 class="text-2xl font-bold mb-6">Server Management Dashboard</h1>
+<body class="bg-light">
 
-        <!-- Active Servers Section -->
-        <div class="mb-8">
-            <h2 class="text-xl font-semibold mb-4">Active Servers</h2>
-            <ul id="serverList" class="list-disc pl-6"></ul>
-        </div>
+<div class="container my-5">
+    <div class="card shadow">
+        <div class="card-body">
+            <h1 class="card-title mb-4">CD Trigger</h1>
 
-        <!-- Artifact Selection Section -->
-        <div class="mb-8">
-            <h2 class="text-xl font-semibold mb-4">Select Artifact</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div>
-                    <label for="projectName" class="block text-sm font-medium text-gray-700">Project Name</label>
-                    <select id="projectName" class="mt-1 block w-full p-2 border rounded-md"></select>
+            <div class="mb-4">
+                <h5>Active Servers</h5>
+                <ul id="serverList" class="list-group"></ul>
+            </div>
+
+            <div class="mb-4">
+                <h5>Select Artifact</h5>
+                <div class="row g-2 mb-2">
+                    <div class="col-md">
+                        <label for="projectName" class="form-label">Select a Project</label>
+                        <select id="projectName" class="form-select"></select>
+                    </div>
+                    <div class="col-md">
+                        <label for="tag" class="form-label">Tag</label>
+                        <select id="tag" class="form-select"></select>
+                    </div>
+                    <div class="col-md">
+                        <label for="version" class="form-label">Select a Version</label>
+                        <select id="version" class="form-select"></select>
+                    </div>
                 </div>
-                <div>
-                    <label for="tag" class="block text-sm font-medium text-gray-700">Tag</label>
-                    <select id="tag" class="mt-1 block w-full p-2 border rounded-md"></select>
-                </div>
-                <div>
-                    <label for="version" class="block text-sm font-medium text-gray-700">Version</label>
-                    <select id="version" class="mt-1 block w-full p-2 border rounded-md"></select>
+                <div id="selectedCid" class="form-text"></div>
+            </div>
+
+            <div class="mb-4">
+                <h5>Credentials</h5>
+                <div class="row g-2">
+                    <div class="col-md">
+                        <label for="artifactPassword" class="form-label">Enter the Artifact Password</label>
+                        <input type="password" id="artifactPassword" class="form-control">
+                    </div>
+                    <div class="col-md">
+                        <label for="serverPassword" class="form-label">Enter Server Password</label>
+                        <input type="password" id="serverPassword" class="form-control">
+                    </div>
                 </div>
             </div>
-            <div id="selectedCid" class="text-sm text-gray-600 mb-4"></div>
-        </div>
 
-        <!-- Password Inputs Section -->
-        <div class="mb-8">
-            <h2 class="text-xl font-semibold mb-4">Credentials</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="artifactPassword" class="block text-sm font-medium text-gray-700">Artifact Password</label>
-                    <input type="password" id="artifactPassword" class="mt-1 block w-full p-2 border rounded-md" placeholder="Enter artifact password">
-                </div>
-                <div>
-                    <label for="serverPassword" class="block text-sm font-medium text-gray-700">Server Password</label>
-                    <input type="password" id="serverPassword" class="mt-1 block w-full p-2 border rounded-md" placeholder="Enter server password">
-                </div>
+            <div class="mb-4">
+                <h5>Port Availability</h5>
+                <button id="checkPortButton" class="btn btn-primary btn-sm me-2 mb-2">Check for Port Availability</button>
+                <button id="decommissionButton" class="btn btn-danger btn-sm mb-2">Decommission</button>
+                <ul id="portAvailability" class="list-group mt-2"></ul>
             </div>
-        </div>
 
-        <!-- Port Availability Section -->
-        <div class="mb-8">
-            <h2 class="text-xl font-semibold mb-4">Port Availability</h2>
-            <button id="checkPortButton" class="mb-4 bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700">Check Port Availability</button>
-            <button id="decommissionButton" class="mb-4 bg-red-600 text-white p-2 rounded-md hover:bg-red-700 ml-2">Decommission Service</button>
-            <ul id="portAvailability" class="list-disc pl-6"></ul>
-        </div>
 
-        <!-- Deploy Button -->
-        <button id="deployButton" class="w-full bg-green-600 text-white p-2 rounded-md hover:bg-green-700">Deploy</button>
-    </div>
 
-    <!-- Minimalist Loading Overlay -->
-    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
-        <div class="bg-white p-6 rounded shadow text-center">
-            <div class="loader mb-3"></div>
-            <span id="loadingText" class="text-lg font-medium text-gray-800">Deploying, please wait...</span>
+            <button id="deployButton" class="btn btn-success w-100">Deploy</button>
         </div>
     </div>
-    <!-- Loader Animation Style -->
-    <style>
-    .loader {
-      border: 4px solid #e5e7eb;
-      border-top: 4px solid #22c55e;
-      border-radius: 50%;
-      width: 32px;
-      height: 32px;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto;
+
+
+
+    <div class="modal" tabindex="-1" id="loadingModal">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-center">
+          <div class="modal-body">
+            <div class="spinner-border text-success mb-3"></div>
+            <div id="loadingText">Please wait...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script>
+
+let selectedCid = null;
+let serverIps = [];
+let availableIps = [];
+let builds = [];
+
+function fetchServers() {
+    fetch('/list-active-server')
+      .then(res => res.json())
+      .then(data => {
+          serverIps = data.servers.map(s => s.id);
+          let html = data.servers.map(s => `<li class="list-group-item">${s.name}</li>`).join('');
+          document.getElementById('serverList').innerHTML = html;
+      });
+}
+
+function fetchBuildInfo() {
+    fetch('/artifact_build_info')
+      .then(res => res.json())
+      .then(data => {
+          builds = data.project_builds;
+
+          let projects = [...new Set(builds.map(b => b.project_name))];
+          let tags = [...new Set(builds.map(b => b.tag))];
+          let versions = [...new Set(builds.map(b => b.version))];
+
+          setOptions('projectName', projects, 'Project');
+          setOptions('tag', tags, 'Tag');
+          setOptions('version', versions, 'Version');
+      });
+}
+
+
+function setOptions(id, options, label) {
+    let el = document.getElementById(id);
+    el.innerHTML = `<option value="">Select ${label}</option>` + options.map(v => `<option>${v}</option>`).join('');
+}
+
+function updateSelectedCid() {
+    let project = document.getElementById('projectName').value;
+    let tag = document.getElementById('tag').value;
+    let version = document.getElementById('version').value;
+    let found = builds.find(b => b.project_name === project && b.tag === tag && b.version === version);
+    selectedCid = found ? found.build_cid : null;
+    document.getElementById('selectedCid').textContent = selectedCid ? 'Selected CID: ' + selectedCid : '';
+}
+
+function checkPortAvailability() {
+    let tag = document.getElementById('tag').value;
+    if (!tag) { alert('Select a tag'); return; }
+    showLoading('Checking port...');
+    fetch('/check-port-availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: tag, ips: serverIps })
+    })
+    .then(res => res.json())
+    .then(data => {
+        availableIps = Object.keys(data).filter(ip => data[ip] === 'Available');
+        let html = Object.entries(data)
+          .map(([ip, status]) =>
+            `<li class="list-group-item ${status==='Available'?'text-success':'text-danger'}">
+                ${ip}: ${status}
+            </li>`).join('');
+        document.getElementById('portAvailability').innerHTML = html;
+        hideLoading();
+    });
+}
+
+
+function decommissionService() {
+    let tag = document.getElementById('tag').value;
+    let serverPassword = document.getElementById('serverPassword').value;
+    if (!tag || !serverPassword) { alert('Fill in all fields'); return; }
+    showLoading('Decommissioning......');
+    fetch('/check-port-availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: tag, ips: serverIps })
+    })
+    .then(res => res.json())
+    .then(data => {
+        let unavailableIps = Object.keys(data).filter(ip => data[ip] !== 'Available');
+        if (unavailableIps.length === 0) {
+            alert('No servers to decommission.');
+            hideLoading();
+            return;
+        }
+
+
+        return fetch('/decommission', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                server_list: unavailableIps,
+                deployment_server_password: serverPassword,
+                tag: tag
+            })
+        });
+    })
+    .then(res => res ? res.json() : null)
+    .then(data => {
+        if (data && data.status === 'success') alert('Decommission successful!');
+        else if (data) alert('Decommission failed: ' + (data.message || ''));
+        hideLoading();
+    });
+}
+
+
+function deploy() {
+    let artifactPassword = document.getElementById('artifactPassword').value;
+    let serverPassword = document.getElementById('serverPassword').value;
+    let tag = document.getElementById('tag').value;
+
+    if (!selectedCid || !artifactPassword || !serverPassword || !tag || availableIps.length === 0) {
+        alert('Please fill in all fields and check port availability!');
+        return;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    </style>
+    showLoading('Deploying...');
+    fetch('/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            server_list: availableIps,
+            build_cid: selectedCid,
+            artifact_password: artifactPassword,
+            deployment_server_password: serverPassword,
+            tag: tag
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert(data.message || (data.status === 'success' ? 'Deployment successful!' : 'Deployment failed.'));
+        hideLoading();
+    });
+}
 
-    <script>
-        let selectedCid = null;
-        let serverIps = [];
-        let availableIps = [];
 
-        // Fetch active servers
-        async function fetchServers() {
-            try {
-                const response = await fetch('/list-active-server');
-                if (response.redirected || response.status === 302) {
-                    alert('Session invalid. Please log in.');
-                    window.location.href = '/login';
-                    return;
-                }
-                const data = await response.json();
-                if (data.error) {
-                    console.error('Error fetching servers:', data.error);
-                    alert('Failed to fetch servers: ' + data.error);
-                    return;
-                }
-                serverIps = data.servers.map(server => server.id);
-                const serverList = document.getElementById('serverList');
-                serverList.innerHTML = data.servers.map(server => `<li>${server.name}</li>`).join('');
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error fetching servers: ' + error.message);
-            }
-        }
+function showLoading(text) {
+    document.getElementById('loadingText').textContent = text;
+    let modal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    modal.show();
+    window._loadingModal = modal; 
+}
+function hideLoading() {
+    if (window._loadingModal) window._loadingModal.hide();
+}
 
-        // Fetch artifact build info and populate dropdowns
-        async function fetchBuildInfo() {
-            try {
-                const response = await fetch('/artifact_build_info');
-                if (response.redirected || response.status === 302) {
-                    alert('Session invalid. Please log in.');
-                    window.location.href = '/login';
-                    return;
-                }
-                const data = await response.json();
-                const builds = data.project_builds;
 
-                // Get unique project names, tags, and versions
-                const projectNames = [...new Set(builds.map(build => build.project_name))];
-                const tags = [...new Set(builds.map(build => build.tag))];
-                const versions = [...new Set(builds.map(build => build.version))];
 
-                // Populate dropdowns
-                const projectNameSelect = document.getElementById('projectName');
-                const tagSelect = document.getElementById('tag');
-                const versionSelect = document.getElementById('version');
+document.addEventListener('DOMContentLoaded', function() {
+    fetchServers();
+    fetchBuildInfo();
 
-                projectNameSelect.innerHTML = '<option value="">Select Project</option>' +
-                    projectNames.map(name => `<option value="${name}">${name}</option>`).join('');
-                tagSelect.innerHTML = '<option value="">Select Tag</option>' +
-                    tags.map(tag => `<option value="${tag}">${tag}</option>`).join('');
-                versionSelect.innerHTML = '<option value="">Select Version</option>' +
-                    versions.map(version => `<option value="${version}">${version}</option>`).join('');
+    document.getElementById('projectName').addEventListener('change', updateSelectedCid);
+    document.getElementById('tag').addEventListener('change', updateSelectedCid);
+    document.getElementById('version').addEventListener('change', updateSelectedCid);
 
-                // Update CID when all dropdowns are selected
-                function updateSelectedCid() {
-                    const project = projectNameSelect.value;
-                    const tag = tagSelect.value;
-                    const version = versionSelect.value;
-                    if (project && tag && version) {
-                        const selectedBuild = builds.find(build =>
-                            build.project_name === project &&
-                            build.tag === tag &&
-                            build.version === version
-                        );
-                        selectedCid = selectedBuild ? selectedBuild.build_cid : null;
-                        document.getElementById('selectedCid').textContent =
-                            selectedCid ? `Selected CID: ${selectedCid}` : 'No matching build found';
-                    } else {
-                        selectedCid = null;
-                        document.getElementById('selectedCid').textContent = '';
-                    }
-                }
+    document.getElementById('checkPortButton').addEventListener('click', checkPortAvailability);
+    document.getElementById('decommissionButton').addEventListener('click', decommissionService);
+    document.getElementById('deployButton').addEventListener('click', deploy);
+});
+</script>
 
-                projectNameSelect.addEventListener('change', updateSelectedCid);
-                tagSelect.addEventListener('change', updateSelectedCid);
-                versionSelect.addEventListener('change', updateSelectedCid);
-            } catch (error) {
-                console.error('Error fetching build info:', error);
-                alert('Error fetching build info: ' + error.message);
-            }
-        }
-
-        // Check port availability
-        async function checkPortAvailability() {
-            const tag = document.getElementById('tag').value;
-            if (!tag) {
-                alert('Please select a tag.');
-                return;
-            }
-
-            try {
-                const response = await fetch('/check-port-availability', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tag, ips: serverIps })
-                });
-                if (response.redirected || response.status === 302) {
-                    alert('Session invalid. Please log in.');
-                    window.location.href = '/login';
-                    return;
-                }
-                const data = await response.json();
-                availableIps = Object.keys(data).filter(ip => data[ip] === 'Available');
-                const portList = document.getElementById('portAvailability');
-                portList.innerHTML = Object.entries(data).map(([ip, status]) =>
-                    `<li class="${status === 'Available' ? 'text-green-600' : 'text-red-600'}">${ip}: ${status}</li>`
-                ).join('');
-                if (availableIps.length === 0) {
-                    alert('No servers available for deployment.');
-                }
-            } catch (error) {
-                console.error('Error checking ports:', error);
-                alert('Error checking port availability: ' + error.message);
-            }
-        }
-
-        // Decommission service (with loading overlay and text update)
-        async function decommissionService() {
-            const loadingOverlay = document.getElementById('loadingOverlay');
-            const loadingText = document.getElementById('loadingText');
-            loadingText.textContent = "Decommissioning, please wait...";
-            loadingOverlay.classList.remove('hidden');
-
-            const tag = document.getElementById('tag').value;
-            const serverPassword = document.getElementById('serverPassword').value;
-
-            if (!tag) {
-                loadingOverlay.classList.add('hidden');
-                loadingText.textContent = "Deploying, please wait...";
-                alert('Please select a tag.');
-                return;
-            }
-            if (!serverPassword) {
-                loadingOverlay.classList.add('hidden');
-                loadingText.textContent = "Deploying, please wait...";
-                alert('Please enter the server password.');
-                return;
-            }
-
-            try {
-                const response = await fetch('/check-port-availability', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tag, ips: serverIps })
-                });
-                if (response.redirected || response.status === 302) {
-                    loadingOverlay.classList.add('hidden');
-                    loadingText.textContent = "Deploying, please wait...";
-                    alert('Session invalid. Please log in.');
-                    window.location.href = '/login';
-                    return;
-                }
-                const data = await response.json();
-                const unavailableIps = Object.keys(data).filter(ip => data[ip] !== 'Available');
-
-                if (unavailableIps.length === 0) {
-                    loadingOverlay.classList.add('hidden');
-                    loadingText.textContent = "Deploying, please wait...";
-                    alert('No servers to decommission.');
-                    return;
-                }
-
-                const decommissionResponse = await fetch('/decommission', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        server_list: unavailableIps,
-                        deployment_server_password: serverPassword,
-                        tag: tag
-                    })
-                });
-                if (decommissionResponse.redirected || decommissionResponse.status === 302) {
-                    loadingOverlay.classList.add('hidden');
-                    loadingText.textContent = "Deploying, please wait...";
-                    alert('Session invalid. Please log in.');
-                    window.location.href = '/login';
-                    return;
-                }
-                const decommissionData = await decommissionResponse.json();
-                if (decommissionData.status === 'success') {
-                    alert(decommissionData.message || 'Decommission successful!');
-                    // Refresh port availability list
-                    await checkPortAvailability();
-                } else {
-                    alert(decommissionData.message || 'Decommission failed.');
-                }
-            } catch (error) {
-                console.error('Error decommissioning:', error);
-                alert('Decommission failed: ' + error.message);
-            } finally {
-                loadingOverlay.classList.add('hidden');
-                loadingText.textContent = "Deploying, please wait...";
-            }
-        }
-
-        // Deploy to servers (with loading overlay and text update)
-        async function deploy() {
-            const loadingOverlay = document.getElementById('loadingOverlay');
-            const loadingText = document.getElementById('loadingText');
-            loadingText.textContent = "Deploying, please wait...";
-            loadingOverlay.classList.remove('hidden');
-
-            const artifactPassword = document.getElementById('artifactPassword').value;
-            const serverPassword = document.getElementById('serverPassword').value;
-            const tag = document.getElementById('tag').value;
-
-            if (!selectedCid) {
-                loadingOverlay.classList.add('hidden');
-                alert('Please select a project, tag, and version.');
-                return;
-            }
-            if (!artifactPassword) {
-                loadingOverlay.classList.add('hidden');
-                alert('Please enter the artifact password.');
-                return;
-            }
-            if (!serverPassword) {
-                loadingOverlay.classList.add('hidden');
-                alert('Please enter the server password.');
-                return;
-            }
-            if (!tag) {
-                loadingOverlay.classList.add('hidden');
-                alert('Please select a tag.');
-                return;
-            }
-            if (availableIps.length === 0) {
-                loadingOverlay.classList.add('hidden');
-                alert('No available servers for deployment. Please check port availability first.');
-                return;
-            }
-
-            try {
-                const response = await fetch('/deploy', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        server_list: availableIps,
-                        build_cid: selectedCid,
-                        artifact_password: artifactPassword,
-                        deployment_server_password: serverPassword,
-                        tag: tag
-                    })
-                });
-                if (response.redirected || response.status === 302) {
-                    alert('Session invalid. Please log in.');
-                    window.location.href = '/login';
-                    return;
-                }
-                const data = await response.json();
-                if (data.status === 'success') {
-                    alert(data.message || 'Deployment successful!');
-                } else if (data.status === 'partial_failure') {
-                    alert(
-                        (data.message || 'Some deployments failed.') +
-                        '\nFailed Servers: ' + (data.failed_servers ? data.failed_servers.join(', ') : '') +
-                        '\nCount: ' + (data.count !== undefined ? data.count : '')
-                    );
-                } else {
-                    alert(data.message || 'Deployment failed.');
-                }
-            } catch (error) {
-                alert('Deployment failed: ' + error.message);
-            } finally {
-                loadingOverlay.classList.add('hidden');
-            }
-        }
-
-        // Event listeners
-        document.getElementById('checkPortButton').addEventListener('click', checkPortAvailability);
-        document.getElementById('decommissionButton').addEventListener('click', decommissionService);
-        document.getElementById('deployButton').addEventListener('click', deploy);
-
-        // Initialize
-        fetchServers();
-        fetchBuildInfo();
-    </script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

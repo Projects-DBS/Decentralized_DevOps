@@ -2,240 +2,111 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Pull from IPFS</title>
+  <title>Download a Project - DCICD</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Inter font for modern appearance -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:400,500,600&display=swap">
-  <style>
-    body {
-      font-family: 'Inter', Arial, system-ui, sans-serif;
-      background: #f7f7f7;
-      margin: 0; padding: 0;
-      color: #222;
-      letter-spacing: 0.01em;
-    }
-    .container {
-      max-width: 540px;
-      margin: 64px auto;
-      background: #fff;
-      padding: 36px 44px 44px 44px;
-      border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.10);
-      text-align: center;
-    }
-    h2 {
-      margin-bottom: 32px;
-      color: #222;
-      font-weight: 600;
-      font-size: 2rem;
-      letter-spacing: 0.01em;
-    }
-    label {
-      text-align: left;
-      display: block;
-      font-size: 1rem;
-      color: #353535;
-      font-weight: 500;
-      margin: 14px 0 2px 10%;
-    }
-    select, button, input[type="password"] {
-      margin: 15px 0;
-      padding: 10px 16px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      font-size: 16px;
-      width: 80%;
-      box-sizing: border-box;
-      display: block;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    input[type="password"] {
-      margin-top: 0;
-      letter-spacing: 0.08em;
-    }
-    .password-hint {
-      font-size: 13px;
-      color: #888;
-      margin: 5px 0 0 10%;
-      text-align: left;
-    }
-    .error-msg {
-      color: #c00;
-      font-size: 14px;
-      font-weight: 500;
-      margin-top: 5px;
-      text-align: left;
-      margin-left: 10%;
-    }
-    button {
-      background: #3477f5;
-      color: #fff;
-      border: none;
-      font-size: 19px;
-      padding: 14px 34px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: background 0.3s;
-      margin-top: 6px;
-      letter-spacing: 0.04em;
-    }
-    button:hover { background: #2657b5;}
-    .flash {
-      margin-top: 24px;
-      color: #008e3a;
-      font-weight: 500;
-      word-break: break-all;
-      white-space: pre-line;
-      font-size: 1.1rem;
-      letter-spacing: 0.02em;
-    }
-    @media (max-width: 640px) {
-      .container {
-        margin: 30px 6px;
-        padding: 16px 7vw 20px 7vw;
-      }
-      h2 {
-        font-size: 1.35rem;
-      }
-      select, button, input[type="password"] {
-        font-size: 0.96rem;
-        padding: 8px 12px;
-      }
-      label {
-        font-size: 0.98rem;
-      }
-      .password-hint, .error-msg { font-size: 12px; }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>Download Project from IPFS</h2>
-    <div id="main-content"></div>
-    <pre id="out" class="flash"></pre>
-  </div>
-  <script>
-    // Password validation function
-    function validatePassword(pw) {
-      if (!pw || pw.length < 8) return 'At least 8 characters required.';
-      if (!/[A-Za-z]/.test(pw)) return 'At least one letter required.';
-      if (!/[0-9]/.test(pw)) return 'At least one number required.';
-      return '';
-    }
 
-    // On load, fetch projects and build dropdowns
-    window.onload = function() {
-      fetch('/get_projects', {method: 'POST'})
-        .then(r => r.json())
-        .then(data => {
-          let projects = data.projects || [];
-          let main = document.getElementById('main-content');
-          if (!projects.length) {
-            main.innerHTML = '<div class="flash" style="color:#c00">No project pushed yet.</div>';
-            return;
-          }
-          // Build unique lists
-          let pnames = [...new Set(projects.map(p => p.project_name))];
-          main.innerHTML =
-            `<form id="pullForm" autocomplete="off">
-              <label>Project:</label>
-              <select id="project" name="project" required>
-                <option value="">Select Project</option>
-                ${pnames.map(n => `<option value="${n}">${n}</option>`).join('')}
-              </select>
-              <label>Tag:</label>
-              <select id="tag" name="tag" required>
-                <option value="">Select Tag</option>
-              </select>
-              <label>Version:</label>
-              <select id="version" name="version" required>
-                <option value="">Select Version</option>
-              </select>
-              <label for="zip_password">Decryption Password:</label>
-              <input type="password" id="zip_password" name="zip_password" placeholder="Enter password" required>
-              <div class="password-hint">
-                Password must be at least 8 characters, contain a letter and a number.
-              </div>
-              <div id="password-error" class="error-msg" style="display:none;"></div>
-              <button type="submit">Download Project ZIP</button>
-            </form>`;
-          let proj = document.getElementById('project');
-          let tag = document.getElementById('tag');
-          let ver = document.getElementById('version');
-          let pass = document.getElementById('zip_password');
-          let pwError = document.getElementById('password-error');
-          // Populate tags on project change
-          proj.onchange = function() {
-            let tags = projects.filter(p => p.project_name === proj.value)
-                               .map(p => p.tag);
-            tags = [...new Set(tags)];
-            tag.innerHTML = '<option value="">Select Tag</option>' +
-                            tags.map(t => `<option value="${t}">${t}</option>`).join('');
-            ver.innerHTML = '<option value="">Select Version</option>';
-          };
-          // Populate versions on tag change
-          tag.onchange = function() {
-            let versions = projects.filter(
-              p => p.project_name === proj.value && p.tag === tag.value
-            ).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-            ver.innerHTML = '<option value="">Select Version</option>' +
-              versions.map(p =>
-                `<option value="${p.cid}|${p.version}">v${p.version} [${p.timestamp}]</option>`
-              ).join('');
-          };
-          // On submit, download ZIP
-          document.getElementById('pullForm').onsubmit = function(e) {
-            e.preventDefault();
-            pwError.style.display = "none";
-            let projectName = proj.value;
-            let val = ver.value.split('|');
-            let cid = val[0];
-            let zipPassword = pass.value;
-            let out = document.getElementById('out');
-            // Password validation
-            let errorMsg = validatePassword(zipPassword);
-            if (errorMsg) {
-              pwError.textContent = errorMsg;
-              pwError.style.display = "block";
-              pass.focus();
-              return false;
-            }
-            out.textContent = 'Preparing download...';
-            fetch('/download_project', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({
-                cid: cid,
-                project_name: projectName,
-                zip_password: zipPassword
-              })
-            }).then(async r => {
-              if(r.status === 403) {
-                // wrong password (backend returns 403)
-                let err = await r.json();
-                out.textContent = 'Download error: ' + (err.error || 'Wrong password');
-                return Promise.reject();
-              }
-              if(!r.ok) {
-                let err = await r.json();
-                out.textContent = 'Download error: ' + (err.error || 'Error');
-                return Promise.reject();
-              }
-              return r.blob();
-            }).then(blob => {
-              if (!blob) return; // handled error already
-              let a = document.createElement('a');
-              a.href = window.URL.createObjectURL(blob);
-              a.download = projectName + '.zip';
-              document.body.appendChild(a); a.click();
-              a.remove();
-              out.textContent = '✅ Download started!';
-            }).catch(() => {});
-          };
-        });
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<div class="container py-5">
+  <div class="bg-white rounded shadow p-4 mx-auto" style="max-width:400px;">
+    <h2 class="mb-4 text-center">Download Project from the Repository</h2>
+    <form id="pullForm" autocomplete="off">
+      <select id="project" class="form-select mb-3" required>
+        <option value="">Select a Project</option>
+      </select>
+      <select id="tag" class="form-select mb-3" required>
+        <option value="">Select a Tag</option>
+      </select>
+      <select id="version" class="form-select mb-3" required>
+        <option value="">Select a Version</option>
+      </select>
+      <input type="password" id="zip_password" class="form-control mb-2" placeholder="Decryption Password" required>
+      <div id="password-error" class="text-danger small mb-2" style="display:none;"></div>
+      <button type="submit" class="btn btn-primary w-100">Download the Project</button>
+    </form>
+    <div id="out" class="mt-3 text-success text-center small"></div>
+  </div>
+</div>
+
+<script>
+fetch('/get_projects', {method: 'POST'})
+  .then(r => r.json())
+  .then(data => {
+    let p = data.projects || [];
+    let project = document.getElementById('project');
+    let tag = document.getElementById('tag');
+    let version = document.getElementById('version');
+
+    [...new Set(p.map(x => x.project_name))].forEach(n => {
+      project.innerHTML += `<option>${n}</option>`;
+    });
+
+    project.onchange = function() {
+      tag.innerHTML = '<option value="">Select a Tag</option>';
+      version.innerHTML = '<option value="">Select a Version</option>';
+      [...new Set(p.filter(x => x.project_name === this.value).map(x => x.tag))]
+        .forEach(t => tag.innerHTML += `<option>${t}</option>`);
     };
-  </script>
+
+    tag.onchange = function() {
+      version.innerHTML = '<option value="">Select a Version</option>';
+      p.filter(x => x.project_name === project.value && x.tag === this.value)
+       .forEach(v => version.innerHTML += `<option value="${v.cid}|${v.version}">v${v.version} [${v.timestamp}]</option>`);
+    };
+  });
+
+
+  function checkPassword(pw) {
+  if (pw.length < 8) return 'At least 8 characters.';
+  if (!/[A-Za-z]/.test(pw)) return 'Letters needed.';
+  if (!/[0-9]/.test(pw)) return 'Numbers needed.';
+  return '';
+}
+
+document.getElementById('pullForm').onsubmit = function(e) {
+  e.preventDefault();
+  let pw = document.getElementById('zip_password').value;
+  let error = document.getElementById('password-error');
+  let msg = checkPassword(pw);
+  if (msg) {
+    error.textContent = msg;
+    error.style.display = "block";
+    return;
+  } else {
+    error.style.display = "none";
+  }
+  let ver = document.getElementById('version').value.split('|');
+  let out = document.getElementById('out');
+  out.textContent = 'Preparing download...';
+  fetch('/download_project', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      cid: ver[0],
+      project_name: document.getElementById('project').value,
+      zip_password: pw
+    })
+  })
+  .then(async r => {
+    if (!r.ok) {
+      let err = await r.json();
+      out.textContent = 'Error: ' + (err.error || 'Download failed.');
+      return;
+    }
+    return r.blob();
+  })
+  .then(blob => {
+    if (!blob) return;
+    let a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = document.getElementById('project').value + '.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    out.textContent = 'Download Initiated';
+  });
+};
+</script>
+
 </body>
 </html>

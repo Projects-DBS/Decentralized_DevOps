@@ -213,6 +213,7 @@ def remove_user():
         immutable_application_log(session, "remove_user", "user-management", f"User removed.",ipns_key_logs)
         
             
+            
         return jsonify({"success": success, "message": message})
     except:
         success = False
@@ -277,6 +278,7 @@ def login():
                 session["start_time"] = datetime.now(timezone.utc).isoformat()
 
                 immutable_application_log(session, "login", "login_page", "Login successful", ipns_key_logs)
+                
 
                 if access_info.get("role") == "admin":
                     return redirect(url_for('admin_dashboard'))
@@ -456,6 +458,7 @@ def build_info():
 @app.route('/logout')
 def logout():
     immutable_application_log(session, "logout", "login", f"Logged out",ipns_key_logs)
+    
     session.clear()
       
     return redirect(url_for('login')) 
@@ -533,10 +536,12 @@ def decommission():
         if len(success_servers) == len(server_list):
             immutable_application_log(session, "decommission", "trigger-cd", f"Decommission done for all server.",ipns_key_logs)
             
+                
             return jsonify({"status": "success", "message": "Decommission done!"})
         elif len(success_servers) == 0:
             immutable_application_log(session, "decommission", "trigger-cd", f"Decommission failed for all server.",ipns_key_logs)
             
+                
             return jsonify({
                 "status": "error",
                 "message": "Decommission failed on all servers.",
@@ -545,6 +550,7 @@ def decommission():
         else:
             immutable_application_log(session, "decommission", "trigger-cd", f"Decommission failed for some server.",ipns_key_logs)
             
+                
                 
             return jsonify({
                 "status": "partial_failure",
@@ -667,10 +673,12 @@ def deploy():
             immutable_application_log(session, "trigger_cd", "deploy", f"Deployment done for all the server.",ipns_key_logs)
             
                 
+                
             return jsonify({"status": "success", "message": "Deployment done!"})
         elif len(success_servers) == 0:
             immutable_application_log(session, "trigger_cd", "deploy", f"Deployment failed for all the server.",ipns_key_logs)
             
+                
                 
             return jsonify({
                 "status": "error",
@@ -679,7 +687,8 @@ def deploy():
             })
         else:
             immutable_application_log(session, "trigger_cd", "deploy", f"Deployment failed for some server.",ipns_key_logs)
-            
+             
+                
                 
             return jsonify({
                 "status": "partial_failure",
@@ -792,6 +801,7 @@ def download_project():
 
             immutable_application_log(session, "download_project", "pull_from_ipfs", "Download the Project.",ipns_key_logs)
             
+                
                 
             return send_file(
                 dec_path,
@@ -993,6 +1003,7 @@ def trigger_ci_build():
 
         immutable_application_log(session, "trigger_ci", "trigger-ci", "Build triggered",ipns_key_logs)
         
+            
             
         return jsonify({
             "success": True,
@@ -1250,7 +1261,9 @@ def register():
             return jsonify({"success": False, "message": "Unable to register the user. IPNS publish error. Contact Admin."}), 500
 
         immutable_application_log(session, "user_registration", "user-management", f"New user was registered.", ipns_key_logs)
-
+        
+            
+        
         return jsonify({"success": True, "message": "Registration complete."}), 200
 
     except Exception as e:
@@ -1357,6 +1370,7 @@ def pushto_ipfs():
         if status == True:
             immutable_application_log(session, "push_project", "pushto_ipfs", "Project Pushed",ipns_key_logs)
             
+                
                 
             return jsonify(success=True, cid=new_cid)
         else:

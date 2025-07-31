@@ -2,343 +2,216 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>User Management</title>
+    <title>User Management - DCICD</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0;}
-        .container {
-            max-width: 460px; margin: 30px auto; background: #fff; padding: 28px 18px 22px 18px;
-            border-radius: 16px; box-shadow: 0 6px 32px 0 rgba(52,119,245,0.09), 0 1.5px 7px #e0e8f8;
-        }
-        h2 { text-align: center; color: #2c4374; font-weight: 600;}
-        .nav-btns { display: flex; gap: 8px; margin-bottom: 28px; }
-        .nav-btns button {
-            flex: 1;
-            padding: 13px 0;
-            background: #e8eefb;
-            color: #234;
-            border: none;
-            border-radius: 9px 9px 0 0;
-            font-size: 18px;
-            font-weight: 600;
-            transition: background .22s, color .18s;
-            cursor: pointer;
-        }
-        .nav-btns button.active {
-            background: #3477f5;
-            color: #fff;
-            box-shadow: 0 2px 7px 0 #dde8fd;
-        }
-        .section { display: none; }
-        .section.show { display: block; }
-        label { display: block; margin: 17px 0 8px 0; color: #355; font-weight: 600; font-size: 1.07em;}
-        input, select {
-            width: 100%; padding: 11px; border: 1.2px solid #c9d3ec; border-radius: 5px; font-size: 16px; box-sizing: border-box;
-            background: #fff;
-        }
-        select { font-size: 15.5px;}
-        .checkbox-group {
-            margin: 10px 0 16px 0;
-            padding: 10px 8px;
-            background: #fff;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-        }
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 6px;
-            font-size: 15.7px;
-        }
-        .checkbox-item:last-child {
-            margin-bottom: 0;
-        }
-        .checkbox-item input[type="checkbox"] {
-            margin-right: 10px;
-            accent-color: #3477f5;
-            width: 18px; height: 18px;
-        }
-        .action-btn {
-            width: 100%;
-            padding: 13px 0;
-            background: #3477f5;
-            color: #fff;
-            border: none;
-            border-radius: 7px;
-            font-size: 17.3px;
-            font-weight: 700;
-            margin-top: 23px;
-            letter-spacing: 0.09em;
-            transition: background .19s;
-            cursor: pointer;
-            box-shadow: 0 3px 12px 0 #dce7fa;
-        }
-        .action-btn:disabled {
-            background: #aeb9cf;
-            color: #e3e8f2;
-            cursor: not-allowed;
-        }
-        #reg-message, #remove-message {
-            margin: 13px 0 0 0;
-            text-align: center;
-            font-size: 15.5px;
-            font-weight: 600;
-        }
-        #reg-message.success, #remove-message.success { color: #2e7d32; }
-        #reg-message.error, #remove-message.error { color: #d32f2f; }
-        #roleInfo { margin:10px 0; color:#357; font-size:0.97em; min-height:22px;}
-        @media (max-width: 600px) {
-            .container { max-width: 99vw; padding: 10px 2vw 15px 2vw;}
-            .nav-btns button { font-size: 15.2px; }
-            input, select { font-size: 15px; }
-            label { font-size: 15.5px;}
-            .checkbox-item { font-size: 14.8px;}
-        }
-    </style>
+
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body>
-<div class="container">
-    <div class="nav-btns">
-        <button id="regNav" class="active" type="button">Registration</button>
-        <button id="removeNav" type="button">Remove User</button>
-    </div>
-    <div class="section show" id="registrationSection">
-        <h2>Registration</h2>
-        <form id="regForm" autocomplete="off">
-            <label>Username</label>
-            <input type="text" name="username" required>
-            <label>First Name</label>
-            <input type="text" name="first_name" required>
-            <label>Last Name</label>
-            <input type="text" name="last_name" required>
-            <label>Role</label>
-            <select name="role" id="roleSelect" required>
-                <option value="">-- Select a role --</option>
-            </select>
-            <div id="roleInfo"></div>
-            <label>Organization</label>
-            <select name="organization" id="orgSelect" required>
-                <option value="">-- Select organization --</option>
-            </select>
-            <label>Email</label>
-            <input type="email" name="email" required>
-            <label>Contact</label>
-            <input type="tel" name="contact" required>
-            <!-- PUBLIC KEY UPLOAD SECTION -->
-            <label>Public Key (.pub)</label>
-            <input type="file" id="publicKeyInput" accept=".pub" required>
-            <div id="pubkey-filename" style="color:#357;font-size:14px;margin-bottom:8px;"></div>
-            <!-- /PUBLIC KEY UPLOAD SECTION -->
-            <label>Password</label>
-            <input type="password" name="password" required minlength="8">
-            <label>Confirm Password</label>
-            <input type="password" name="confirm_password" required minlength="8">
-            <label>Operations</label>
-            <div class="checkbox-group" id="operations"></div>
-            <label>Page Access</label>
-            <div class="checkbox-group" id="pages"></div>
-            <button type="submit" class="action-btn">Register</button>
-            <div id="reg-message"></div>
-        </form>
-    </div>
-    <div class="section" id="removeUserSection">
-        <h2>Remove User</h2>
-        <label>Select User</label>
-        <select id="userSelect"><option value="">-- Select a user --</option></select>
-        <button id="removeBtn" class="action-btn" disabled>Remove User</button>
-        <div id="remove-message"></div>
+<body class="bg-light">
+
+<div class="container my-5" style="max-width:480px;">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="d-flex mb-3">
+                <button id="regNav" type="button" class="btn btn-outline-primary flex-fill me-2 active">Registration</button>
+                <button id="removeNav" type="button" class="btn btn-outline-secondary flex-fill">Remove User</button>
+            </div>
+
+
+            <div id="registrationSection">
+                <h3 class="mb-3 text-center">Registration</h3>
+                <form id="regForm" autocomplete="off">
+                    <div class="mb-2">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-control" minlength="6" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">First Name</label>
+                        <input type="text" name="first_name" class="form-control" minlength="3" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" name="last_name" class="form-control" minlength="3" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Role</label>
+                        <select name="role" id="roleSelect" class="form-select" required>
+                            <option value="">Select a role</option>
+                        </select>
+                        <div id="roleInfo" class="form-text"></div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Organization</label>
+                        <select name="organization" id="orgSelect" class="form-select" required>
+                            <option value="">Select an organization</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Contact</label>
+                        <input type="tel" name="contact" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Select the Public Key (.pub)</label>
+                        <input type="file" id="publicKeyInput" class="form-control" accept=".pub" required>
+                        <div id="pubkey-filename" class="form-text"></div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Enter a Password</label>
+                        <input type="password" name="password" class="form-control" minlength="8" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Confirm Password</label>
+                        <input type="password" name="confirm_password" class="form-control" minlength="8" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Operations</label>
+                        <div id="operations"></div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Page Access</label>
+                        <div id="pages"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mt-2">Register</button>
+                    <div id="reg-message" class="text-center mt-2"></div>
+                </form>
+            </div>
+
+
+            <div id="removeUserSection" style="display:none;">
+                <h3 class="mb-3 text-center">Remove a User</h3>
+                <div class="mb-3">
+                    <label class="form-label">Select a User</label>
+                    <select id="userSelect" class="form-select">
+                        <option value="">Select a user</option>
+                    </select>
+                </div>
+                <button id="removeBtn" class="btn btn-danger w-100" disabled>Remove User</button>
+                <div id="remove-message" class="text-center mt-2"></div>
+            </div>
+        </div>
     </div>
 </div>
 
-<script>
-function loadRoles() {
-    fetch('/roles')
-      .then(r => r.json())
-      .then(roles => {
-          const mainRoles = ['admin','developer','qa'];
-          const sel = document.getElementById('roleSelect');
-          sel.innerHTML = '<option value="">-- Select a role --</option>';
-          window.ROLE_MAP = {};
-          if (Array.isArray(roles)) {
-              roles.forEach(roleObj => {
-                  const roleName = Object.keys(roleObj)[0];
-                  if (mainRoles.includes(roleName)) {
-                      const descriptions = roleObj[roleName];
-                      const label = roleName.charAt(0).toUpperCase() + roleName.slice(1);
-                      window.ROLE_MAP[roleName] = descriptions.join(", ");
-                      const opt = document.createElement('option');
-                      opt.value = roleName;
-                      opt.textContent = label;
-                      sel.appendChild(opt);
-                  }
-              });
-          }
-      })
-      .catch(e => {
-          console.error("Failed to load roles:", e);
-      });
-}
-loadRoles();
 
-document.getElementById('roleSelect').onchange = function() {
-    const infoDiv = document.getElementById('roleInfo');
-    const selected = this.value;
-    if (window.ROLE_MAP && window.ROLE_MAP[selected]) {
-        infoDiv.textContent = "Includes: " + window.ROLE_MAP[selected];
-    } else {
-        infoDiv.textContent = '';
-    }
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+
+
+let publicKeyText = "";
+let ROLE_MAP = {};
+
+
+document.getElementById('regNav').onclick = function() {
+    document.getElementById('registrationSection').style.display = "";
+    document.getElementById('removeUserSection').style.display = "none";
+    this.classList.add("active");
+    document.getElementById('removeNav').classList.remove("active");
+};
+document.getElementById('removeNav').onclick = function() {
+    document.getElementById('registrationSection').style.display = "none";
+    document.getElementById('removeUserSection').style.display = "";
+    this.classList.add("active");
+    document.getElementById('regNav').classList.remove("active");
+    loadUserList();
 };
 
-fetch('/organizations')
-  .then(r => r.json())
-  .then(orgs => {
-      const sel = document.getElementById('orgSelect');
-      sel.innerHTML = '<option value="">-- Select organization --</option>';
-      orgs.forEach(org => {
-          const opt = document.createElement('option');
-          opt.value = org;
-          opt.textContent = org;
-          sel.appendChild(opt);
-      });
-  });
 
-fetch('/registration_parameter')
-    .then(r=>r.json()).then(d=>{
-        let ops = d.operations || [];
-        let box = '';
-        for(let i=0;i<ops.length;i++){
-            box += '<div class="checkbox-item"><input type="checkbox" name="operations" value="'+ops[i]+'"><span>'+ops[i]+'</span></div>';
-        }
-        document.getElementById('operations').innerHTML = box;
+fetch('/roles').then(r=>r.json()).then(roles=>{
+    let select = document.getElementById('roleSelect');
+    select.innerHTML = '<option value="">Select role</option>';
+    roles.forEach(roleObj => {
+        let role = Object.keys(roleObj)[0];
+        let label = role.charAt(0).toUpperCase() + role.slice(1);
+        select.innerHTML += `<option value="${role}">${label}</option>`;
+        ROLE_MAP[role] = roleObj[role].join(", ");
     });
+});
+document.getElementById('roleSelect').onchange = function() {
+    let info = document.getElementById('roleInfo');
+    info.textContent = this.value && ROLE_MAP[this.value] ? "Includes: "+ROLE_MAP[this.value] : "";
+};
 
-fetch('/registration_parameter_pages')
-    .then(r=>r.json()).then(d=>{
-        let pages = d.page_access || [];
-        let box = '';
-        for(let i=0;i<pages.length;i++){
-            box += '<div class="checkbox-item"><input type="checkbox" name="page_access" value="'+pages[i]+'"><span>'+pages[i]+'</span></div>';
-        }
-        document.getElementById('pages').innerHTML = box;
+
+
+fetch('/organizations').then(r=>r.json()).then(orgs=>{
+    let sel = document.getElementById('orgSelect');
+    sel.innerHTML = '<option value="">Select organization</option>';
+    orgs.forEach(org => {
+        sel.innerHTML += `<option value="${org}">${org}</option>`;
     });
+});
 
-function showSection(section) {
-    document.getElementById('registrationSection').classList.remove('show');
-    document.getElementById('removeUserSection').classList.remove('show');
-    document.getElementById('regNav').classList.remove('active');
-    document.getElementById('removeNav').classList.remove('active');
-    if(section === 'registration') {
-        document.getElementById('registrationSection').classList.add('show');
-        document.getElementById('regNav').classList.add('active');
-    } else {
-        document.getElementById('removeUserSection').classList.add('show');
-        document.getElementById('removeNav').classList.add('active');
-        document.getElementById('remove-message').textContent = '';
-        document.getElementById('remove-message').className = '';
-        loadUserList();
-    }
-}
-document.getElementById('regNav').onclick = function(){ showSection('registration'); };
-document.getElementById('removeNav').onclick = function(){ showSection('remove'); };
 
-let publicKeyText = '';
-document.getElementById('publicKeyInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    const label = document.getElementById('pubkey-filename');
+
+fetch('/registration_parameter').then(r=>r.json()).then(d=>{
+    let box = '';
+    (d.operations||[]).forEach(op=>{
+        box += `<div class="form-check">
+            <input class="form-check-input" type="checkbox" name="operations" value="${op}">
+            <label class="form-check-label">${op}</label>
+        </div>`;
+    });
+    document.getElementById('operations').innerHTML = box;
+});
+fetch('/registration_parameter_pages').then(r=>r.json()).then(d=>{
+    let box = '';
+    (d.page_access||[]).forEach(p=>{
+        box += `<div class="form-check">
+            <input class="form-check-input" type="checkbox" name="page_access" value="${p}">
+            <label class="form-check-label">${p}</label>
+        </div>`;
+    });
+    document.getElementById('pages').innerHTML = box;
+});
+
+
+
+document.getElementById('publicKeyInput').onchange = function(e) {
+    let file = e.target.files[0];
+    let info = document.getElementById('pubkey-filename');
     publicKeyText = '';
-    label.textContent = '';
-
-    if (!file) return;
-    if (!file.name.endsWith('.pub')) {
-        label.textContent = "Please select a file with .pub extension.";
-        label.style.color = "#d32f2f";
-        e.target.value = '';
+    info.textContent = '';
+    if(!file) return;
+    if(!file.name.endsWith('.pub')) {
+        info.textContent = "Please select a .pub file.";
         return;
     }
-    const reader = new FileReader();
+    let reader = new FileReader();
     reader.onload = function(ev) {
         publicKeyText = ev.target.result;
-        label.textContent = "File loaded: " + file.name;
-        label.style.color = "#357";
+        info.textContent = "Loaded: " + file.name;
     };
-    reader.onerror = function() {
-        label.textContent = "Error reading file!";
-        label.style.color = "#d32f2f";
-        publicKeyText = '';
-    }
     reader.readAsText(file);
-});
+};
+
+
 
 document.getElementById('regForm').onsubmit = function(e){
     e.preventDefault();
     let f = e.target;
-    let msgDiv = document.getElementById('reg-message');
-    msgDiv.textContent = '';
-    msgDiv.className = '';
+    let msg = document.getElementById('reg-message');
+    msg.textContent = '';
 
-    if(!f.username.value || f.username.value.trim().length < 6) {
-        msgDiv.textContent = "Username must be at least 6 characters.";
-        msgDiv.className = "error";
-        f.username.focus(); return;
-    }
-    if(!f.first_name.value || f.first_name.value.trim().length < 3) {
-        msgDiv.textContent = "First name must be at least 3 characters.";
-        msgDiv.className = "error";
-        f.first_name.focus(); return;
-    }
-    if(!f.last_name.value || f.last_name.value.trim().length < 3) {
-        msgDiv.textContent = "Last name must be at least 3 characters.";
-        msgDiv.className = "error";
-        f.last_name.focus(); return;
-    }
+    if(f.username.value.trim().length < 6) { msg.textContent = "Username at least 6 chars"; return; }
+    if(f.first_name.value.trim().length < 3) { msg.textContent = "First name at least 3 chars"; return; }
+    if(f.last_name.value.trim().length < 3) { msg.textContent = "Last name at least 3 chars"; return; }
     let emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if(!emailPattern.test(f.email.value.trim())) {
-        msgDiv.textContent = "Enter a valid email address.";
-        msgDiv.className = "error";
-        f.email.focus(); return;
-    }
+    if(!emailPattern.test(f.email.value.trim())) { msg.textContent = "Invalid email"; return; }
     let phonePattern = /^\d{10}$/;
-    if(!phonePattern.test(f.contact.value.trim())) {
-        msgDiv.textContent = "Contact must be a 10-digit number.";
-        msgDiv.className = "error";
-        f.contact.focus(); return;
-    }
-    if (!publicKeyText) {
-        msgDiv.textContent = "Please upload your .pub public key file.";
-        msgDiv.className = "error";
-        document.getElementById('publicKeyInput').focus();
-        return;
-    }
-    let pw = f.password.value, cpw = f.confirm_password.value;
-    if(!pw || !cpw) {
-        msgDiv.textContent = "Password fields cannot be empty.";
-        msgDiv.className = "error";
-        f.password.focus(); return;
-    }
-    let strongPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
-    if(!strongPattern.test(pw)) {
-        msgDiv.textContent = "Password must be at least 8 characters with uppercase, lowercase, and a number.";
-        msgDiv.className = "error";
-        f.password.focus(); return;
-    }
-    if(pw !== cpw) {
-        msgDiv.textContent = "Passwords do not match.";
-        msgDiv.className = "error";
-        f.confirm_password.focus(); return;
-    }
-    let ops = f.querySelectorAll('input[name="operations"]:checked');
-    if(ops.length < 1) {
-        msgDiv.textContent = "Select at least one operation.";
-        msgDiv.className = "error";
-        return;
-    }
-    let pags = f.querySelectorAll('input[name="page_access"]:checked');
-    if(pags.length < 1) {
-        msgDiv.textContent = "Select at least one page access.";
-        msgDiv.className = "error";
-        return;
-    }
+    if(!phonePattern.test(f.contact.value.trim())) { msg.textContent = "Contact must be 10 digits"; return; }
+    if(!publicKeyText) { msg.textContent = "Upload .pub file"; return; }
+    if(f.password.value.length < 8) { msg.textContent = "Password min 8 chars"; return; }
+    if(f.password.value !== f.confirm_password.value) { msg.textContent = "Passwords don't match"; return; }
+    let checkedOps = Array.from(f.querySelectorAll('input[name="operations"]:checked'));
+    if(checkedOps.length < 1) { msg.textContent = "Select at least one operation"; return; }
+    let checkedPages = Array.from(f.querySelectorAll('input[name="page_access"]:checked'));
+    if(checkedPages.length < 1) { msg.textContent = "Select at least one page"; return; }
+
 
     let data = {
         username: f.username.value.trim(),
@@ -348,9 +221,9 @@ document.getElementById('regForm').onsubmit = function(e){
         organization: f.organization.value,
         email: f.email.value.trim(),
         contact: f.contact.value.trim(),
-        password: pw,
-        operations: Array.from(ops).map(x=>x.value),
-        page_access: Array.from(pags).map(x=>x.value),
+        password: f.password.value,
+        operations: checkedOps.map(x=>x.value),
+        page_access: checkedPages.map(x=>x.value),
         public_key: publicKeyText
     };
 
@@ -359,77 +232,54 @@ document.getElementById('regForm').onsubmit = function(e){
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(data)
     })
-    .then(response => {
-        const type = response.headers.get("Content-Type") || "";
-        if (type.includes("application/json")) {
-            return response.json().then(resp => {
-                msgDiv.textContent = resp.message || "Registered!";
-                msgDiv.className = resp.success ? "success" : "error";
-                if(resp.success) {
-                    f.reset();
-                    publicKeyText = '';
-                    document.getElementById('pubkey-filename').textContent = '';
-                    alert("User Registered Successfully!");
-                }
-            });
-        } else {
-            return response.text().then(txt => { 
-                msgDiv.textContent = "Unknown response: " + txt; 
-                msgDiv.className = "error"; 
-            });
+    .then(r=>r.json())
+    .then(resp=>{
+        msg.textContent = resp.message || (resp.success ? "Registered!" : "Error");
+        if(resp.success) {
+            f.reset();
+            publicKeyText = '';
+            document.getElementById('pubkey-filename').textContent = '';
+            alert("User Registered!");
         }
     })
-    .catch(e => { 
-        msgDiv.textContent = "Registration failed: " + e.message; 
-        msgDiv.className = "error"; 
+    .catch(e=>{
+        msg.textContent = "Registration failed";
     });
-}
+};
+
 
 function loadUserList() {
-    fetch('/list_all_users')
-    .then(r => r.json())
-    .then(users => {
+    fetch('/list_all_users').then(r=>r.json()).then(users=>{
         let sel = document.getElementById('userSelect');
-        sel.innerHTML = '<option value="">-- Select a user --</option>';
-        if (Array.isArray(users)) {
-            users.forEach(u => {
-                sel.innerHTML += `<option value="${u.username}">${u.username}</option>`;
-            });
-        }
+        sel.innerHTML = '<option value="">Select a user</option>';
+        (users||[]).forEach(u=>{
+            sel.innerHTML += `<option value="${u.username}">${u.username}</option>`;
+        });
         document.getElementById('removeBtn').disabled = true;
     });
 }
-
 document.getElementById('userSelect').onchange = function() {
     document.getElementById('removeBtn').disabled = !this.value;
     document.getElementById('remove-message').textContent = '';
-    document.getElementById('remove-message').className = '';
-}
-
+};
 document.getElementById('removeBtn').onclick = function() {
     let user = document.getElementById('userSelect').value;
-    let msgDiv = document.getElementById('remove-message');
-    msgDiv.textContent = '';
-    msgDiv.className = '';
+    let msg = document.getElementById('remove-message');
     if(!user) return;
-    if(!confirm("Are you sure you want to remove user '" + user + "'?")) return;
+    if(!confirm("Remove user '"+user+"'?")) return;
     fetch('/remove-user', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ username: user })
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({username:user})
     })
-    .then(r => r.json())
-    .then(resp => {
-        msgDiv.textContent = resp.message || "Operation complete.";
-        msgDiv.className = resp.success ? "success" : "error";
+    .then(r=>r.json())
+    .then(resp=>{
+        msg.textContent = resp.message || (resp.success ? "User removed" : "Error");
         loadUserList();
         document.getElementById('removeBtn').disabled = true;
     })
-    .catch(() => {
-        msgDiv.textContent = "Error deleting user.";
-        msgDiv.className = "error";
-    });
-}
+    .catch(()=>{ msg.textContent = "Error deleting user."; });
+};
 </script>
 </body>
 </html>

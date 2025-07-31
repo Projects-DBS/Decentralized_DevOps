@@ -2,172 +2,119 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CI Trigger</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f7f7f7; }
-    .container { max-width: 440px; margin: 50px auto; background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 4px 12px #ccc; }
-    label { display: block; margin-top: 16px; font-weight: 500; }
-    select, input, button { width: 100%; padding: 9px; margin-top: 6px; margin-bottom: 12px; border-radius: 7px; border: 1px solid #bbb; }
-    button { background: #3477f5; color: #fff; border: none; font-size: 16px; cursor: pointer; font-weight: 600;}
-    button:hover { background: #2657b5;}
-    .error { color: #b00; margin-top: 10px; font-weight: 500;}
-    .flash { color: #008e3a; margin-top: 10px; font-weight: 500;}
-    .pw-hint { font-size: 13px; color: #888; margin-top: -10px; margin-bottom: 10px;}
-  </style>
+  <title>CI Trigger - DCICD</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
 </head>
-<body>
-  <div class="container">
-    <h2>CI Trigger</h2>
+
+<body class="bg-light">
+<div class="container py-5">
+  <div class="bg-white rounded shadow p-4 mx-auto" style="max-width:410px;">
+    <h2 class="mb-4 text-center">CI Trigger</h2>
     <form id="ciForm" autocomplete="off">
-      <label for="project">Project</label>
-      <select id="project" required>
-        <option value="">Select Project</option>
-      </select>
-      <label for="tag">Tag</label>
-      <select id="tag" required>
-        <option value="">Select Tag</option>
-      </select>
-      <label for="version">Version</label>
-      <select id="version" required>
-        <option value="">Select Version</option>
-      </select>
-
-      <!-- Project zip password section -->
-      <label for="pzip_password">Project Zip Password</label>
-      <input type="password" id="pzip_password" required placeholder="Password to decrypt project zip">
-      <label for="pzip_password2">Confirm Project Zip Password</label>
-      <input type="password" id="pzip_password2" required placeholder="Confirm project zip password">
-
-      <!-- Build zip password section -->
-      <label for="zip_password">Build Zip Password</label>
-      <input type="password" id="zip_password" required placeholder="Password to encrypt build zip">
-      <label for="zip_password2">Confirm Build Zip Password</label>
-      <input type="password" id="zip_password2" required placeholder="Confirm build zip password">
-
-      <div class="pw-hint">
-        Passwords must be at least 8 characters and include uppercase, lowercase, a number, and a special character.
+      <div class="mb-3">
+        <label class="form-label">Project</label>
+        <select id="project" class="form-select" required>
+          <option value="">Select Project</option>
+        </select>
       </div>
-
-      <button type="submit">Trigger CI</button>
+      <div class="mb-3">
+        <label class="form-label">Tag</label>
+        <select id="tag" class="form-select" required>
+          <option value="">Select Tag</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Version</label>
+        <select id="version" class="form-select" required>
+          <option value="">Select Version</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Project Zip Password</label>
+        <input type="password" id="pzip_password" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Build Zip Password</label>
+        <input type="password" id="zip_password" class="form-control mb-2" required placeholder="Build zip password">
+        <input type="password" id="zip_password2" class="form-control" required placeholder="Confirm build zip password">
+        <div class="form-text">
+          Passwords must be at least 8 characters and include uppercase, lowercase, a number, and a special character.
+        </div>
+      </div>
+      <div id="msg" class="text-center small mb-2"></div>
+      <button type="submit" class="btn btn-primary w-100">Trigger CI</button>
     </form>
-    <div id="msg"></div>
   </div>
-  <script>
-    let allProjects = [];
-    function showError(msg) {
-      document.getElementById('msg').textContent = msg;
-      document.getElementById('msg').className = 'error';
-    }
-    function showFlash(msg) {
-      document.getElementById('msg').textContent = msg;
-      document.getElementById('msg').className = 'flash';
-    }
+</div>
+<script>
+let projects = [];
+fetch('/project_info', {method:'POST'}).then(r=>r.json()).then(data=>{
+  projects = Array.isArray(data)?data:(data.projects||[]);
+  let projSel = document.getElementById('project');
+  let names = [...new Set(projects.map(p=>p.project_name))];
+  projSel.innerHTML = '<option value="">Select Project</option>';
+  names.forEach(n=>projSel.innerHTML += `<option>${n}</option>`);
+});
 
-    function loadAllProjects() {
-      fetch('/project_info', { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-          allProjects = Array.isArray(data) ? data : (data.projects || []);
-          fillProjectsDropdown();
-        });
-    }
+document.getElementById('project').onchange = function() {
+  let pname = this.value;
+  let tagSel = document.getElementById('tag');
+  let versionSel = document.getElementById('version');
+  tagSel.innerHTML = '<option value="">Select a Tag</option>';
+  versionSel.innerHTML = '<option value="">Select a Version</option>';
+  if(!pname) return;
+  let tags = [...new Set(projects.filter(p=>p.project_name===pname).map(p=>p.tag))];
+  tags.forEach(t=>tagSel.innerHTML += `<option>${t}</option>`);
+};
+document.getElementById('tag').onchange = function() {
+  let pname = document.getElementById('project').value;
+  let t = this.value;
+  let versionSel = document.getElementById('version');
+  versionSel.innerHTML = '<option value="">Select a Version</option>';
+  if(!pname||!t) return;
+  let vers = [...new Set(projects.filter(p=>p.project_name===pname&&p.tag===t).map(p=>p.version))];
+  vers.forEach(v=>versionSel.innerHTML += `<option>${v}</option>`);
+};
 
-    function fillProjectsDropdown() {
-      const projectSelect = document.getElementById('project');
-      projectSelect.innerHTML = '<option value="">Select Project</option>';
-      [...new Set(allProjects.map(p => p.project_name))].forEach(name => {
-        projectSelect.innerHTML += `<option value="${name}">${name}</option>`;
-      });
-      document.getElementById('tag').innerHTML = '<option value="">Select Tag</option>';
-      document.getElementById('version').innerHTML = '<option value="">Select Version</option>';
-    }
-    function fillTagsDropdown(projectName) {
-      const tagSelect = document.getElementById('tag');
-      tagSelect.innerHTML = '<option value="">Select Tag</option>';
-      [...new Set(allProjects.filter(p => p.project_name === projectName).map(p => p.tag))]
-        .forEach(tag => { tagSelect.innerHTML += `<option value="${tag}">${tag}</option>`; });
-      document.getElementById('version').innerHTML = '<option value="">Select Version</option>';
-    }
-    function fillVersionsDropdown(projectName, tag) {
-      const verSelect = document.getElementById('version');
-      verSelect.innerHTML = '<option value="">Select Version</option>';
-      [...new Set(allProjects.filter(p => p.project_name === projectName && p.tag === tag).map(p => p.version))]
-        .forEach(v => { verSelect.innerHTML += `<option value="${v}">${v}</option>`; });
-    }
-    function getSelectedProjectEntry(projectName, tag, version) {
-      return allProjects.find(
-        p => p.project_name === projectName && p.tag === tag && String(p.version) === String(version)
-      );
-    }
-
-    window.onload = loadAllProjects;
-    document.getElementById('project').onchange = function() {
-      let pname = this.value;
-      if (pname) fillTagsDropdown(pname);
-      else {
-        document.getElementById('tag').innerHTML = '<option value="">Select Tag</option>';
-        document.getElementById('version').innerHTML = '<option value="">Select Version</option>';
-      }
-    };
-    document.getElementById('tag').onchange = function() {
-      const pname = document.getElementById('project').value;
-      const tag = this.value;
-      if (pname && tag) fillVersionsDropdown(pname, tag);
-      else document.getElementById('version').innerHTML = '<option value="">Select Version</option>';
-    };
-
-    document.getElementById('ciForm').onsubmit = function(e) {
-      e.preventDefault();
-      const project = document.getElementById('project').value;
-      const tag = document.getElementById('tag').value;
-      const version = document.getElementById('version').value;
-      const pzipPassword = document.getElementById('pzip_password').value;
-      const pzipPassword2 = document.getElementById('pzip_password2').value;
-      const zipPassword = document.getElementById('zip_password').value;
-      const zipPassword2 = document.getElementById('zip_password2').value;
-
-      if (!project || !tag || !version) return showError('All fields required!');
-      if (!pzipPassword || !pzipPassword2 || !zipPassword || !zipPassword2)
-        return showError('Enter all passwords and confirmations.');
-      if (pzipPassword !== pzipPassword2)
-        return showError('Project zip passwords do not match.');
-      if (zipPassword !== zipPassword2)
-        return showError('Build zip passwords do not match.');
-      // Optionally enforce that build zip password is not the same as project zip password
-      if (pzipPassword === zipPassword)
-        return showError('Project zip password and build zip password should be different.');
-
-      // Strong password validation: min 8 chars, uppercase, lowercase, number, special char
-      let strongPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
-      if (!strongPattern.test(pzipPassword)) {
-        return showError('Project zip password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
-      }
-      if (!strongPattern.test(zipPassword)) {
-        return showError('Build zip password must be at least 8 characters and include uppercase, lowercase, a number, and a special character.');
-      }
-
-      const selected = getSelectedProjectEntry(project, tag, version);
-      if (!selected) return showError('Invalid selection.');
-
-      showFlash('Triggering CI...');
-      fetch('/trigger-build-ci', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          cid: selected.cid,
-          tag: selected.tag,
-          zip_password: pzipPassword,           // For decrypting the original zip
-          build_zip_password: zipPassword,      // For encrypting the build
-          project_name: project
-        })
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) showFlash('CI triggered successfully!');
-        else showError(data.message || 'Trigger failed.');
-      })
-      .catch(() => showError('Network or server error.'));
-    };
-  </script>
+document.getElementById('ciForm').onsubmit = function(e) {
+  e.preventDefault();
+  let project = document.getElementById('project').value;
+  let tag = document.getElementById('tag').value;
+  let version = document.getElementById('version').value;
+  let pzip = document.getElementById('pzip_password').value;
+  let bzip = document.getElementById('zip_password').value;
+  let bzip2 = document.getElementById('zip_password2').value;
+  let msg = document.getElementById('msg');
+  let strong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+  msg.textContent = "";
+  msg.className = "text-center small mb-2";
+  if(!project||!tag||!version||!pzip||!bzip||!bzip2) { msg.textContent="All fields are required!"; msg.classList.add("text-danger"); return;}
+  if(bzip!==bzip2) { msg.textContent="Build Project passwords do not match."; msg.classList.add("text-danger"); return;}
+  if(pzip===bzip) { msg.textContent="Project and Build password should be different."; msg.classList.add("text-danger"); return;}
+  if(!strong.test(pzip)) { msg.textContent="Project password was not strong enough."; msg.classList.add("text-danger"); return;}
+  if(!strong.test(bzip)) { msg.textContent="Build password was not strong enough."; msg.classList.add("text-danger"); return;}
+  let selected = projects.find(p=>p.project_name===project&&p.tag===tag&&String(p.version)===String(version));
+  if(!selected) { msg.textContent="Invalid selection."; msg.classList.add("text-danger"); return;}
+  msg.textContent = "Triggering CI Pipeline......";
+  msg.classList.remove("text-danger");
+  fetch('/trigger-build-ci',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      cid:selected.cid,
+      tag:selected.tag,
+      zip_password:pzip,
+      build_zip_password:bzip,
+      project_name:project
+    })
+  }).then(r=>r.json()).then(data=>{
+    if(data.success){ msg.textContent="Build generated successfully."; msg.classList.add("text-success"); }
+    else{ msg.textContent=data.message||"Trigger failed."; msg.classList.add("text-danger"); }
+  }).catch(()=>{ msg.textContent="Network or server error."; msg.classList.add("text-danger"); });
+};
+</script>
 </body>
 </html>
