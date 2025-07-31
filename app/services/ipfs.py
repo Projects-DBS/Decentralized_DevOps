@@ -85,7 +85,7 @@ def remove_user_info(ipns_access_control_key, username, ipns_publickey):
             tmp_path = tmp.name
 
         add = subprocess.run(
-            ['ipfs', 'add', '-Q', tmp_path], capture_output=True, text=True
+            ['ipfs-cluster-ctl', 'add', '-Q', tmp_path], capture_output=True, text=True
         )
         os.unlink(tmp_path)
         if add.returncode != 0:
@@ -147,7 +147,7 @@ def remove_user_pubkey(ipns_user_pubkey_key, username):
             tmp_path = tmp.name
 
         add = subprocess.run(
-            ['ipfs', 'add', '-Q', tmp_path], capture_output=True, text=True
+            ['ipfs-cluster-ctl', 'add', '-Q', tmp_path], capture_output=True, text=True
         )
         os.unlink(tmp_path)
         if add.returncode != 0:
