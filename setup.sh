@@ -4,16 +4,11 @@ set -e
 APP_USERNAME="${APP_USERNAME:-guest}"
 PASSWORD="${PASSWORD:-guestpass}"
 CLUSTER_SECRET="${CLUSTER_SECRET:-changeme}"
-# ADMIN_PASSWORD="${ADMIN_PASSWORD:-changeme}"
 SWARM_KEY="${SWARM_KEY:-changeme}"
 HOME_DIR="/home/${APP_USERNAME}"
 
 export USERNAME="admin"
-
-
 export PUBKEY_CONTENT="$(cat /admin.pub)"
-
-
 
 
 if ! id "$APP_USERNAME" &>/dev/null; then
@@ -45,7 +40,6 @@ if [ -d "/home/${APP_USERNAME}/ipns_keys" ] && compgen -G "/home/${APP_USERNAME}
     rm -rf /home/${APP_USERNAME}/ipns_keys
 fi
 
-
 service ssh start
 
 sudo -u "${APP_USERNAME}" ipfs daemon &
@@ -62,46 +56,31 @@ fi
 sudo -u "${APP_USERNAME}" ipfs-cluster-service daemon &
 sleep 10
 
-# mkdir -p "${HOME_DIR}/admin"
-# if [ ! -f "${HOME_DIR}/admin/admin_auth.json" ]; then
-#   cp /tmp/admin_auth.json "${HOME_DIR}/admin/admin_auth.json"
-#   chown "${APP_USERNAME}:${APP_USERNAME}" "${HOME_DIR}/admin/admin_auth.json"
-# fi
-
-
 sudo -u "${APP_USERNAME}" bash -c "
-
   cid=\$(ipfs-cluster-ctl add -q /tmp/admin_auth.enc)
 
 
-  # Create access control JSON with encrypted CID
   json_data=\$(jq -n --arg admin \"\$cid\" '{\"access_control\": [{\"admin\":\$admin}]}')
 
   echo \"\$json_data\" > ${HOME_DIR}/db.json
 
-  # Add access control JSON to IPFS cluster
   dbcid=\$(ipfs-cluster-ctl add -q ${HOME_DIR}/db.json)
 
-  # Publish IPNS record for access control key
   ipns_output=\$(ipfs name publish --key=\"access_control\" --lifetime=17520h /ipfs/\$dbcid)
 
   ipns_key=\$(echo \"\$ipns_output\" | awk '{print \$3}' | cut -d\":\" -f1)
 
-  # Clean up temporary files
   rm ${HOME_DIR}/db.json /tmp/admin_auth.enc
 "
 
 
 
 sudo -u "${APP_USERNAME}" bash -c '
-  # Create a temporary file for the JSON
   tmpfile=$(mktemp)
   echo "{\"projects\": []}" > "$tmpfile"
 
-  # Add the file to IPFS Cluster and get the CID
   cid=$(ipfs-cluster-ctl add -q "$tmpfile")
 
-  # Publish the CID to IPNS with the "projects" key
   ipns_output=$(ipfs name publish --key="projects" --lifetime=17520h /ipfs/"$cid")
   ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
 
@@ -111,7 +90,6 @@ sudo -u "${APP_USERNAME}" bash -c '
 sudo -u "${APP_USERNAME}" bash -c '
   tmpfile=$(mktemp)
 
-  # Write JSON to temp file (no escaping issues)
   cat > "$tmpfile" <<EOF
 {
   "roles": [
@@ -122,7 +100,6 @@ sudo -u "${APP_USERNAME}" bash -c '
 }
 EOF
 
-  # Add the file to IPFS Cluster and get the CID
   cid=$(ipfs-cluster-ctl add -q "$tmpfile")
   if [ -z "$cid" ]; then
     echo "Error: Failed to get CID from IPFS Cluster."
@@ -130,7 +107,6 @@ EOF
     exit 1
   fi
 
-  # Publish the CID to IPNS with the "projects" key
   ipns_output=$(ipfs name publish --key="roles" --lifetime=17520h /ipfs/"$cid")
   if [ $? -ne 0 ]; then
     echo "Error: IPNS publish failed."
@@ -138,7 +114,6 @@ EOF
     exit 2
   fi
 
-  # Extract IPNS key (adjust parsing if output format changes)
   ipns_key=$(echo "$ipns_output" | awk '\''{print $3}'\'' | cut -d":" -f1)
 
   rm "$tmpfile"
@@ -151,7 +126,7 @@ sudo -u "${APP_USERNAME}" bash -c "
 
   cid=\$(ipfs-cluster-ctl add -q \"\$tmpfile\")
   if [ -z \"\$cid\" ]; then
-    echo \"Error: Failed to get CID from IPFS Cluster.\"
+    echo \"Error: Failed to fetch CID from the IPFS Cluster.\"
     rm \"\$tmpfile\"
     exit 1
   fi
@@ -172,14 +147,11 @@ sudo -u "${APP_USERNAME}" bash -c "
 
 
 sudo -u "${APP_USERNAME}" bash -c '
-  # Create a temporary file for the JSON
   tmpfile=$(mktemp)
   echo "{\"project_builds\": []}" > "$tmpfile"
 
-  # Add the file to IPFS Cluster and get the CID
   cid=$(ipfs-cluster-ctl add -q "$tmpfile")
 
-  # Publish the CID to IPNS with the "project_builds" key
   ipns_output=$(ipfs name publish --key="project_builds" --lifetime=17520h /ipfs/"$cid")
   ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
 

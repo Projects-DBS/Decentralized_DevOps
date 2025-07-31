@@ -5,43 +5,42 @@ import tempfile
 from flask import json
 import requests
 
-def run_cmd(cmd, input_data=None):
+def run_cmd(cmds, input_data=None):
     try:
-        # cmd should be list for secure execution
-        if isinstance(cmd, str):
-            cmd_list = cmd.split()
+        if isinstance(cmds, str):
+            cmd_lists = cmds.split()
         else:
-            cmd_list = cmd
-        result = subprocess.run(cmd_list, capture_output=True, text=True, input=input_data)
+            cmd_lists = cmds
+        result = subprocess.run(cmd_lists, capture_output=True, text=True, input=input_data)
         if result.returncode != 0:
-            return False, f"Execution failed. {result}"
+            return False, f"Execution error."
         return result.stdout.strip()
-    except Exception as e:
-        return False, str(e)
+    except Exception as msg:
+        return False, f"Error: {msg}"
 
 def ipns_keys():
     try:
-        result = subprocess.run(['ipfs', 'key', 'list', '-l'], capture_output=True, text=True)
-        parts = result.stdout.strip().split() 
-        key_dict = {}
+        results = subprocess.run(['ipfs', 'key', 'list', '-l'], capture_output=True, text=True)
+        parts = results.stdout.strip().split() 
+        dict = {}
         for i in range(0, len(parts), 2):
-            hash_ = parts[i]
+            key = parts[i]
             name = parts[i + 1]
-            key_dict[name] = hash_
-        return True, key_dict
+            dict[name] = key
+        return True, dict
     except Exception as msg:
         return False, str(msg)
 
 
 def ipfs_connect():
     try:
-        result = subprocess.run(
+        results = subprocess.run(
             ['ipfs', 'version'],
             capture_output=True,
             text=True,
             timeout=2
         )
-        if result.returncode == 0 and result.stdout.strip():
+        if results.returncode == 0 and results.stdout.strip():
             return True
         else:
             return False
@@ -52,19 +51,19 @@ def ipfs_connect():
 
 def remove_user_info(ipns_access_control_key, username, ipns_publickey):
     try:
-        resolved = subprocess.run(
+        resolve = subprocess.run(
             ['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_access_control_key],
             capture_output=True, text=True
         )
-        if resolved.returncode != 0:
-            return False, "Failed to resolve IPNS"
+        if resolve.returncode != 0:
+            return False, "Failed to resolve the IPNS"
 
-        cid = resolved.stdout.strip()
+        cid = resolve.stdout.strip()
         data = subprocess.run(
             ['ipfs', 'cat', cid], capture_output=True, text=True
         )
         if data.returncode != 0:
-            return False, "Failed to fetch data from IPFS"
+            return False, "Failed to fetch data from the IPFS"
 
         info = json.loads(data.stdout)
         ac = info.get("access_control", [])
@@ -90,7 +89,7 @@ def remove_user_info(ipns_access_control_key, username, ipns_publickey):
         )
         os.unlink(tmp_path)
         if add.returncode != 0:
-            return False, "Failed to add updated data to IPFS"
+            return False, "Failed to update data to IPFS"
 
         new_cid = add.stdout.strip()
         publish = subprocess.run(
@@ -98,7 +97,7 @@ def remove_user_info(ipns_access_control_key, username, ipns_publickey):
             capture_output=True, text=True
         )
         if publish.returncode != 0:
-            return False, "Failed to publish to IPNS"
+            return False, "Failed to publish to the IPNS"
         
         st, ms = remove_user_pubkey(ipns_publickey ,username)
         if st == False:
@@ -117,7 +116,7 @@ def remove_user_pubkey(ipns_user_pubkey_key, username):
             capture_output=True, text=True
         )
         if resolved.returncode != 0:
-            return False, "Failed to resolve IPNS for updating the Public Key"
+            return False, "Failed to resolve the IPNS for updating the Public Key"
 
         cid = resolved.stdout.strip()
         data = subprocess.run(
@@ -174,13 +173,13 @@ def list_all_users(ipns_key_access_control):
     if resolve.returncode != 0:
         return []
     cid = resolve.stdout.strip()
-    cat = subprocess.run(
+    cat_info = subprocess.run(
         ['ipfs', 'cat', cid], capture_output=True, text=True
     )
-    if cat.returncode != 0:
+    if cat_info.returncode != 0:
         return []
     try:
-        info = json.loads(cat.stdout)
+        info = json.loads(cat_info.stdout)
     except:
         return []
     return [k for entry in info.get("access_control", []) if isinstance(entry, dict) for k in entry]
@@ -194,14 +193,14 @@ def retrieve_access_control(ipns_cid, username):
     final_data = data.stdout.strip()
 
     try:
-        content_no_newlines = final_data.replace('\n', '')
-        info = json.loads(content_no_newlines)
+        content_nonewline = final_data.replace('\n', '')
+        info = json.loads(content_nonewline)
         access_control_list = info.get("access_control", [])
         for ac_entry in access_control_list:
             if username in ac_entry:
                 return ac_entry[username]
         return 1
-    except requests.RequestException as e:
+    except Exception:
         return 2
 
 def update_project_record(new_cid, version, ipns_key_projects, project_name, access_infos):
@@ -266,9 +265,9 @@ def update_project_record(new_cid, version, ipns_key_projects, project_name, acc
         return False
 
     cmd_publish = ['ipfs', 'name', 'publish', '--key=' + ipns_key_projects, '--lifetime=17520h', new_ipfs_output]
-    publish_output = run_cmd(cmd_publish)
+    published_output = run_cmd(cmd_publish)
 
-    if not publish_output:
+    if not published_output:
         return False
 
     return True
@@ -345,5 +344,3 @@ def get_document_ipfs_cid(cid):
         return content_no_newlines
     except Exception:
         return None
-
-
