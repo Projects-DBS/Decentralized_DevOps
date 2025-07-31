@@ -12,6 +12,15 @@ from services.crypto import decrypt_openssl_subprocess
 from services.session import check_session
 from werkzeug.utils import secure_filename
 from services.logs import get_logs, immutable_application_log
+import os
+import subprocess
+import tempfile
+import zipfile
+import json
+from datetime import datetime, timezone
+from flask import request, jsonify, session, flash, redirect, url_for
+
+
 
 ports = {
     "dev": 1001,
@@ -46,7 +55,6 @@ def resolve_ipns(ipns_key):
         cid = result.stdout.strip().replace("/ipfs/", "")
         return cid
     except subprocess.CalledProcessError as e:
-        print(f"[Resolve Error] {ipns_key}: {e.stderr}")
         return None
 
 def cat_ipfs(cid):
@@ -60,7 +68,6 @@ def cat_ipfs(cid):
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
-        print(f"[Cat Error] {cid}: {e.stderr}")
         return None
 
 
@@ -77,25 +84,17 @@ def initialize_ipns_data():
     }
 
     for category, key_list in categories.items():
-        # Ensure it's a list
         if not isinstance(key_list, list):
-            print(f"[Warning] Skipping '{category}' — not a list")
             continue
 
         for ipns_key in key_list:
-            # Basic validation: must be a non-empty string
             if not isinstance(ipns_key, str) or not ipns_key.strip():
-                print(f"[Warning] Skipping invalid IPNS key in '{category}': {ipns_key}")
                 continue
 
-            print(f"[Info] Resolving {category} → {ipns_key}")
             cid = resolve_ipns(ipns_key)
             if cid:
-                print(f"[Info] → Resolved CID: {cid}")
                 content = cat_ipfs(cid)
-                # You could store or use `content` here if needed
-            else:
-                print(f"[Error] Failed to resolve IPNS key: {ipns_key}")
+
 
     return True
 
@@ -104,17 +103,40 @@ def initialize_ipns_data():
 initialize_ipns_data()
 
 app = Flask(__name__)
+
+
+
+
 app.secret_key = os.urandom(32)
+
+
+
+
+
 app.permanent_session_lifetime = timedelta(minutes=10)
+
+
+
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  
 
-app.config['SESSION_COOKIE_HTTPONLY'] = True     
+app.config['SESSION_COOKIE_HTTPONLY'] = True  
+
+
 app.config['SESSION_COOKIE_SECURE'] = True       
+
+
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'     
 
 
 
 TEMP_DIR = '/tmp'
+
+@app.after_request
+def add_no_cache_headers(response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 def get_client_ip():
     x_forwarded_for = request.headers.get('X-Forwarded-For')
@@ -215,21 +237,21 @@ def cicd_page():
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+
         password = request.form.get("password", "")
 
         if not (3 <= len(username) <= 32) or not username.replace('_', '').isalnum():
-            flash("Invalid username. Use 3-32 characters: letters, numbers, and underscores only.")
+            flash("Invalid username. Use 3 to 32 characters: letters, numbers and underscores only.")
             return redirect(url_for("login"))
 
         if not (6 <= len(password) <= 32):
-            flash("Invalid password length. Must be 6-32 characters.")
+            flash("Invalid password length found. Must be 6 to 32 characters.")
             return redirect(url_for('login'))
 
         ipfs_conn_status = ipfs_connect()
 
         if ipfs_conn_status == True:
             try:
-                # Step 1: Retrieve the access control record (this returns the encrypted CID)
                 cid = retrieve_access_control(ipns_key_access_control, username)
                 if cid == 1:
                     flash("User not exists!")
@@ -239,14 +261,11 @@ def login():
                     return redirect(url_for("login"))
 
                 enc_user_info = get_document_ipfs_cid(cid)
-                # Step 2: Decrypt the CID using the user's password
                 access_infos = decrypt_openssl_subprocess(enc_user_info, password)
                 access_info = json.loads(access_infos)
 
-                # Step 3: Fetch user info JSON from IPFS using the decrypted CID
-                
+                session.clear()
 
-                # Step 4: Set up the session and continue as before
                 session.permanent = True
                 session["username"] = access_info.get("username")
                 session["role"] = access_info.get("role")
@@ -293,7 +312,7 @@ def list_org():
         return jsonify(orgs)
 
     except:
-        return jsonify({"message":"Unable to retrieve roles from IPFS Cluster."})
+        return jsonify({"message":"Unable to retrieve roles from the IPFS Cluster."})
 
 
 
@@ -310,7 +329,7 @@ def list_roles():
             text=True
         )
         if result.returncode != 0:
-            return jsonify({"message":"Unable to retrieve roles from the IPNS Records."})
+            return jsonify({"message":"Unable to retrieve the roles from the IPNS Records."})
         role_cid = result.stdout.strip().replace('\n','')
 
         
@@ -320,12 +339,12 @@ def list_roles():
             text=True
         )
         if result.returncode != 0:
-            return jsonify({"message":"Unable to retrieve roles from the IPFS Cluster."})
+            return jsonify({"message":"Unable to retrieve the roles from the IPFS Cluster."})
         role_info = result.stdout.strip().replace('\n','')
         roles = json.loads(role_info)
         return roles["roles"]
     except Exception as e:
-        return jsonify({"message":"Unable to retrieve roles from IPFS Cluster."})
+        return jsonify({"message":"Unable to retrieve the roles from IPFS Cluster."})
 
 @app.route("/admin-dashboard", methods=["GET","POST"])
 def admin_dashboard():
@@ -436,7 +455,9 @@ def build_info():
 
 @app.route('/logout')
 def logout():
-    session.clear()  
+    immutable_application_log(session, "logout", "login", f"Logged out",ipns_key_logs)
+    session.clear()
+      
     return redirect(url_for('login')) 
 
 @app.route('/decommission', methods=['POST'])
@@ -453,7 +474,7 @@ def decommission():
 
         port = ports.get(tag) 
         if not all([server_list, deployment_server_password, tag, port]):
-            return jsonify({"status": "error", "message": "Missing required parameters"}), 400
+            return jsonify({"status": "error", "message": "Missing some parameters"}), 400
 
         failed_servers = []
         success_servers = []
@@ -463,8 +484,11 @@ def decommission():
                 stop_cmd = f'fuser -k {port}/tcp || true'
                 ssh_cmd = [
                     "sshpass", "-p", deployment_server_password,
+
                     "ssh", "-o", "StrictHostKeyChecking=no",
+
                     f"guest@{server}",
+
                     stop_cmd
                 ]
                 stop_data = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=30)
@@ -474,8 +498,12 @@ def decommission():
                 cleanup_cmd = f'rm -rf {project_dir}'
                 cleanup_full_cmd = [
                     "sshpass", "-p", deployment_server_password,
+
                     "ssh", "-o", "StrictHostKeyChecking=no",
+                    
+                    
                     f"guest@{server}",
+                    
                     cleanup_cmd
                 ]
                 cleanup_data = subprocess.run(cleanup_full_cmd, capture_output=True, text=True, timeout=30)
@@ -487,10 +515,15 @@ def decommission():
                     failed_servers.append({
                         "server": server,
                         "stop_returncode": stop_data.returncode,
-                        "stop_stdout": stop_data.stdout.strip(),
-                        "stop_stderr": stop_data.stderr.strip(),
-                        "cleanup_returncode": cleanup_data.returncode,
-                        "cleanup_stderr": cleanup_data.stderr.strip()
+
+                        
+                    "stop_stdout": stop_data.stdout.strip(),
+                    "stop_stderr": stop_data.stderr.strip(),
+                        
+                        
+                    "cleanup_returncode": cleanup_data.returncode,
+                        
+                    "cleanup_stderr": cleanup_data.stderr.strip()
                     })
 
             except Exception as ex:
@@ -543,7 +576,7 @@ def deploy():
         port = ports.get(tag)
 
         if not all([server_list, build_cid, artifact_password, deployment_server_password, tag, port]):
-            return jsonify({"status": "error", "message": "Missing required parameters"}), 400
+            return jsonify({"status": "error", "message": "Missing some parameters"}), 400
 
         failed_servers = []
         success_servers = []
@@ -582,7 +615,7 @@ def deploy():
 
                 if data1.returncode != 0:
                     if "bad decrypt" in data1.stderr or "bad password" in data1.stderr:
-                        return jsonify({"status": "failed", "message": "Incorrect password for the artifact!"})
+                        return jsonify({"status": "failed", "message": "Incorrect password for artifact!"})
                     failed_servers.append({"server": server, "step": 2, "stderr": data1.stderr.strip()})
                     continue
 
@@ -631,17 +664,17 @@ def deploy():
                 continue
 
         if len(success_servers) == len(server_list):
-            immutable_application_log(session, "trigger_cd", "deploy", f"Deployment done for all server.",ipns_key_logs)
+            immutable_application_log(session, "trigger_cd", "deploy", f"Deployment done for all the server.",ipns_key_logs)
             
                 
             return jsonify({"status": "success", "message": "Deployment done!"})
         elif len(success_servers) == 0:
-            immutable_application_log(session, "trigger_cd", "deploy", f"Deployment failed for all server.",ipns_key_logs)
+            immutable_application_log(session, "trigger_cd", "deploy", f"Deployment failed for all the server.",ipns_key_logs)
             
                 
             return jsonify({
                 "status": "error",
-                "message": "Deployment failed on all servers.",
+                "message": "Deployment failed on all the servers.",
                 "failed_servers": failed_servers
             })
         else:
@@ -652,7 +685,7 @@ def deploy():
                 "status": "partial_failure",
                 "failed_servers": failed_servers,
                 "count": len(failed_servers),
-                "message": "Some deployments failed. Try to deploy again."
+                "message": "Some deployments failed. Please Try to deploy again."
             })
 
     except Exception as e:
@@ -798,13 +831,6 @@ def get_all_projects():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-import os
-import subprocess
-import tempfile
-import zipfile
-import json
-from datetime import datetime, timezone
-from flask import request, jsonify, session, flash, redirect, url_for
 
 
 @app.route('/trigger-build-ci', methods=['POST'])
@@ -836,7 +862,7 @@ def trigger_ci_build():
         )
 
         if result.returncode != 0:
-            return jsonify({"success": False, "message": "Unable to retrieve the requested project from CID for build."})
+            return jsonify({"success": False, "message": "Unable to retrieve the requested project from CID for the build."})
 
         dec_cmd = [
             "openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2",
@@ -847,7 +873,7 @@ def trigger_ci_build():
         dec_result = subprocess.run(dec_cmd, capture_output=True, text=True)
 
         if dec_result.returncode != 0:
-            return jsonify({"success": False, "message": "Decryption failed. Wrong project password or corrupt file."})
+            return jsonify({"success": False, "message": "Decryption failed. Wrong project password or file is corrupt."})
 
         os.makedirs(extract_dir, exist_ok=True)
         try:
@@ -866,7 +892,7 @@ def trigger_ci_build():
             if zipped:
                 break
         if not zipped:
-            return jsonify({"success": False, "message": "No .py file found in project, nothing to zip."})
+            return jsonify({"success": False, "message": "No .py file found in project. So nothing to zip."})
 
         zip_path = os.path.join(root, f"{cid}_build.zip")
         enc_build_path = os.path.join(root, f"{cid}_build.zip.enc")
@@ -889,7 +915,7 @@ def trigger_ci_build():
         )
 
         if ipfs_result.returncode != 0:
-            return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
+            return jsonify({"success": False, "message": "Unable to add the new build info to the IPFS Cluster."})
         new_cid = ipfs_result.stdout.strip()
 
         resolve_result = subprocess.run(
@@ -899,7 +925,7 @@ def trigger_ci_build():
         )
 
         if resolve_result.returncode != 0:
-            return jsonify({"success": False, "message": "Unable to resolve the IPNS Key for latest CID."})
+            return jsonify({"success": False, "message": "Unable to resolve the IPNS Key for the latest CID."})
         current_builds_cid = resolve_result.stdout.strip()
 
         cat_result = subprocess.run(
@@ -909,7 +935,7 @@ def trigger_ci_build():
         )
 
         if cat_result.returncode != 0:
-            return jsonify({"success": False, "message": "Unable to read the build records from IPNS and IPFS."})
+            return jsonify({"success": False, "message": "Unable to read the build records from the IPNS and the IPFS."})
 
         try:
             builds_data = json.loads(cat_result.stdout.strip().replace('\n', ''))
@@ -951,7 +977,7 @@ def trigger_ci_build():
 
         if ipfs_result.returncode != 0:
             os.remove(tmpf_path)
-            return jsonify({"success": False, "message": "Unable to add the new build info to IPFS Cluster."})
+            return jsonify({"success": False, "message": "Unable to add new build info to Cluster."})
 
         updated_cid = ipfs_result.stdout.strip()
 
@@ -963,7 +989,7 @@ def trigger_ci_build():
 
         os.remove(tmpf_path)
         if publish_result.returncode != 0:
-            return jsonify({"success": False, "message": "Unable to publish the new build info to IPNS."})
+            return jsonify({"success": False, "message": "Unable to publish the new build info to the IPNS."})
 
         immutable_application_log(session, "trigger_ci", "trigger-ci", "Build triggered",ipns_key_logs)
         
@@ -1060,27 +1086,25 @@ def register():
     pub_key_info_check = public_key.strip()
     uname = data.get('username', '')
     if not pub_key_info_check.endswith(' ' + uname):
-        return jsonify({"success": False, "message": "Username does not match comment in public key"}), 400
+        return jsonify({"success": False, "message": "Username does not match comment in the public key"}), 400
 
-    # Resolve current IPNS public key record
     res01 = subprocess.run(
         ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_userpublickey],
         capture_output=True,
         text=True
     )
     if res01.returncode != 0:
-        return jsonify({"success": False, "message": "Failed to resolve IPNS public key."}), 500
+        return jsonify({"success": False, "message": "Failed to resolve IPNS for public key."}), 500
 
     cid = res01.stdout.strip()
 
-    # Get the public key record from IPFS
     res02 = subprocess.run(
         ["ipfs", "cat", cid],
         capture_output=True,
         text=True
     )
     if res02.returncode != 0:
-        return jsonify({"success": False, "message": "Failed to fetch public key record."}), 500
+        return jsonify({"success": False, "message": "Failed to fetch the public key record."}), 500
 
     ipns_pubkey_record_str = res02.stdout.strip().replace('\n', '').replace('\r', '')
 
@@ -1093,7 +1117,6 @@ def register():
 
     json_string = json.dumps(ipns_pubkey_record)
 
-    # Save updated public key record to temp file
     with tempfile.NamedTemporaryFile(delete=False, mode='w') as tmp_pubkey_file:
         tmp_pubkey_file.write(json_string)
         tmp_pubkey_path = tmp_pubkey_file.name
@@ -1103,7 +1126,6 @@ def register():
     tmp_acc_file_path = None
 
     try:
-        # Add updated public key record to IPFS cluster
         res03 = subprocess.run(
             ["ipfs-cluster-ctl", "add", "-q", tmp_pubkey_path],
             capture_output=True,
@@ -1114,7 +1136,6 @@ def register():
 
         cid = res03.stdout.strip()
 
-        # Publish updated public key record under IPNS key
         res04 = subprocess.run(
             ["ipfs", "name", "publish", "--key=user_publickey", '--lifetime=17520h', cid],
             capture_output=True,
@@ -1123,7 +1144,6 @@ def register():
         if res04.returncode != 0:
             return jsonify({"success": False, "message": "Unable to register the public key."}), 400
 
-        # Prepare user data for registration
         formatted = {
             "username": data.get('username', ''),
             "first_name": data.get('first_name', ''),
@@ -1139,10 +1159,8 @@ def register():
         if not password:
             return jsonify({"success": False, "message": "Password missing."}), 400
 
-        # Serialize user info JSON to string
         user_info_json = json.dumps(formatted, indent=2)
 
-        # Encrypt the user info JSON using OpenSSL (AES-256-CBC)
         openssl_proc = subprocess.Popen(
             ['openssl', 'enc', '-aes-256-cbc', '-a', '-salt', '-pbkdf2', '-pass', f'pass:{password}'],
             stdin=subprocess.PIPE,
@@ -1156,13 +1174,11 @@ def register():
 
         encrypted_user_info = out.strip()
 
-        # Save the encrypted user info to a temp file
         with tempfile.NamedTemporaryFile('w', delete=False) as tmp_enc_user_file:
             tmp_enc_user_file.write(encrypted_user_info)
             tmp_enc_user_file.flush()
             tmp_enc_user_path = tmp_enc_user_file.name
 
-        # Add encrypted user info file to IPFS cluster
         result = subprocess.run(['ipfs-cluster-ctl', 'add', '-q', tmp_enc_user_path], capture_output=True, text=True)
         if result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to register the user."}), 500
@@ -1172,7 +1188,6 @@ def register():
         username = data.get('username', '')
         access_control = {username: cid}
 
-        # Resolve latest access control IPNS record
         res = subprocess.run(
             ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_access_control],
             capture_output=True,
@@ -1183,7 +1198,6 @@ def register():
 
         latest_cid = res.stdout.strip()
 
-        # Fetch the current access control JSON
         res = subprocess.run(
             ["ipfs", "cat", latest_cid],
             capture_output=True,
@@ -1196,7 +1210,6 @@ def register():
 
         datas = json.loads(latest_record_str)
 
-        # Check for existing username
         existing_user = False
         if "access_control" in datas and isinstance(datas["access_control"], list):
             for entry in datas["access_control"]:
@@ -1207,7 +1220,6 @@ def register():
         if existing_user:
             return jsonify({"success": False, "message": f"Username '{username}' already exists."}), 400
 
-        # Add new access control entry
         if "access_control" in datas and isinstance(datas["access_control"], list):
             datas["access_control"].append(access_control)
         else:
@@ -1215,12 +1227,10 @@ def register():
 
         updated_json_str = json.dumps(datas, indent=2)
 
-        # Write updated access control JSON to temp file
         with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as tmp_acc_file:
             tmp_acc_file.write(updated_json_str)
             tmp_acc_file_path = tmp_acc_file.name
 
-        # Add updated access control JSON to IPFS cluster
         new_ipfs_output = subprocess.run(
             ["ipfs-cluster-ctl", "add", tmp_acc_file_path, "-q"],
             capture_output=True,
@@ -1231,7 +1241,6 @@ def register():
 
         new_cid = new_ipfs_output.stdout.strip()
 
-        # Publish updated access control record
         publish_res = subprocess.run(
             ["ipfs", "name", "publish", "--key=access_control", '--lifetime=17520h', new_cid],
             capture_output=True,
@@ -1240,7 +1249,6 @@ def register():
         if publish_res.returncode != 0:
             return jsonify({"success": False, "message": "Unable to register the user. IPNS publish error. Contact Admin."}), 500
 
-        # Log the registration event
         immutable_application_log(session, "user_registration", "user-management", f"New user was registered.", ipns_key_logs)
 
         return jsonify({"success": True, "message": "Registration complete."}), 200
@@ -1249,7 +1257,6 @@ def register():
         return jsonify({"success": False, "message": f"Unable to register the user. Error: {str(e)}"}), 500
 
     finally:
-        # Cleanup temp files safely
         for path in [tmp_pubkey_path, tmp_user_path, tmp_enc_user_path, tmp_acc_file_path]:
             try:
                 if path and os.path.exists(path):
@@ -1266,9 +1273,10 @@ def register():
 @app.errorhandler(413)
 def too_large(e):
     if request.accept_mimetypes['application/json'] or request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify(success=False, error='File too large! Max upload is 100 MB.'), 413
+
+        return jsonify(success=False, error='File is too large. The Maximum upload size is 100 MB.'), 413
     else:
-        flash('File too large! Max upload is 100 MB.')
+        flash('File is too large. Max uploading size is 100 MB.')
         return redirect(request.url)
 
 @app.route('/pushto_ipfs', methods=['POST'])
