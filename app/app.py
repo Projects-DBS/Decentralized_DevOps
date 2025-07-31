@@ -7,8 +7,8 @@ import tempfile
 from time import sleep
 import zipfile
 from flask import Flask, json, jsonify, make_response, render_template, request, redirect, send_file, url_for, flash, session
-from services.ipfs import ipfs_connect, remove_user_info, remove_user_pubkey, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
-from services.crypto import decrypt_openssl
+from services.ipfs import ipfs_connect, remove_user_info, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
+from services.crypto import decrypt_openssl_subprocess
 from services.session import check_session
 from werkzeug.utils import secure_filename
 from services.logs import get_logs, immutable_application_log
@@ -209,13 +209,13 @@ def cicd_page():
     return render_template("cicd_operations.html")
 
 
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-
-
 
         if not (3 <= len(username) <= 32) or not username.replace('_', '').isalnum():
             flash("Invalid username. Use 3-32 characters: letters, numbers, and underscores only.")
@@ -229,15 +229,24 @@ def login():
 
         if ipfs_conn_status == True:
             try:
-                user_access = retrieve_access_control(ipns_key_access_control, username)
-                if user_access == 1:
+                # Step 1: Retrieve the access control record (this returns the encrypted CID)
+                cid = retrieve_access_control(ipns_key_access_control, username)
+                if cid == 1:
                     flash("User not exists!")
                     return redirect(url_for("login"))
-                elif user_access == 2:
+                elif cid == 2:
                     flash("Error to fetch IPFS Data.")
                     return redirect(url_for("login"))
-                access_control_cid = decrypt_openssl(user_access, password).decode()
-                access_info = get_document_ipfs_cid(access_control_cid)
+
+                enc_user_info = get_document_ipfs_cid(cid)
+                # Step 2: Decrypt the CID using the user's password
+                access_infos = decrypt_openssl_subprocess(enc_user_info, password)
+                access_info = json.loads(access_infos)
+
+                # Step 3: Fetch user info JSON from IPFS using the decrypted CID
+                
+
+                # Step 4: Set up the session and continue as before
                 session.permanent = True
                 session["username"] = access_info.get("username")
                 session["role"] = access_info.get("role")
@@ -245,11 +254,11 @@ def login():
                 session['expiry'] = expiry_time.timestamp()
                 session["page_access"] = access_info.get("pages", [])
                 session["access_info"] = access_info
-                session["organization"] = access_info.get("organization", []) 
+                session["organization"] = access_info.get("organization", [])
                 session["start_time"] = datetime.now(timezone.utc).isoformat()
-                immutable_application_log(session, "login", "login_page", "Login successfull",ipns_key_logs)
-                
-                    
+
+                immutable_application_log(session, "login", "login_page", "Login successful", ipns_key_logs)
+
                 if access_info.get("role") == "admin":
                     return redirect(url_for('admin_dashboard'))
                 elif access_info.get("role") == "developer":
@@ -261,7 +270,7 @@ def login():
                 return redirect(url_for("login"))
 
             except Exception as e:
-                flash(f"Login failed: Invalid Credentials")
+                flash("Login failed: Invalid Credentials")
                 return redirect(url_for("login"))
 
         else:
@@ -269,6 +278,8 @@ def login():
             return redirect(url_for("login"))
 
     return render_template("login.html")
+
+
 
 
 @app.route("/organizations", methods=["GET"])
@@ -1032,8 +1043,6 @@ def reg_parameters_pages():
 
 
     
-
-
 @app.route("/register", methods=['POST'])
 def register():
     status = check_session(session, "user_management")
@@ -1048,11 +1057,11 @@ def register():
 
     public_key = str(public_key).replace('\n', '').replace('\r', '')
 
-    pub_key_info_check = str(public_key).replace('\n', '').replace('\r', '').strip()
+    pub_key_info_check = public_key.strip()
     uname = data.get('username', '')
     if not pub_key_info_check.endswith(' ' + uname):
         return jsonify({"success": False, "message": "Username does not match comment in public key"}), 400
-    
+
     # Resolve current IPNS public key record
     res01 = subprocess.run(
         ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_userpublickey],
@@ -1088,6 +1097,10 @@ def register():
     with tempfile.NamedTemporaryFile(delete=False, mode='w') as tmp_pubkey_file:
         tmp_pubkey_file.write(json_string)
         tmp_pubkey_path = tmp_pubkey_file.name
+
+    tmp_user_path = None
+    tmp_enc_user_path = None
+    tmp_acc_file_path = None
 
     try:
         # Add updated public key record to IPFS cluster
@@ -1126,41 +1139,38 @@ def register():
         if not password:
             return jsonify({"success": False, "message": "Password missing."}), 400
 
-        # Write user info JSON to temp file
-        with tempfile.NamedTemporaryFile('w', delete=False) as tmp_user_file:
-            json.dump(formatted, tmp_user_file, indent=2)
-            tmp_user_file.flush()
-            tmp_user_path = tmp_user_file.name
+        # Serialize user info JSON to string
+        user_info_json = json.dumps(formatted, indent=2)
 
-        # Add user info JSON to IPFS
-        result = subprocess.run(['ipfs', 'add', tmp_user_path, '-q'], capture_output=True, text=True)
+        # Encrypt the user info JSON using OpenSSL (AES-256-CBC)
+        openssl_proc = subprocess.Popen(
+            ['openssl', 'enc', '-aes-256-cbc', '-a', '-salt', '-pbkdf2', '-pass', f'pass:{password}'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        out, err = openssl_proc.communicate(input=user_info_json)
+        if openssl_proc.returncode != 0:
+            return jsonify({"success": False, "message": f"OpenSSL encryption failed: {err.strip()}"}), 500
+
+        encrypted_user_info = out.strip()
+
+        # Save the encrypted user info to a temp file
+        with tempfile.NamedTemporaryFile('w', delete=False) as tmp_enc_user_file:
+            tmp_enc_user_file.write(encrypted_user_info)
+            tmp_enc_user_file.flush()
+            tmp_enc_user_path = tmp_enc_user_file.name
+
+        # Add encrypted user info file to IPFS cluster
+        result = subprocess.run(['ipfs-cluster-ctl', 'add', '-q', tmp_enc_user_path], capture_output=True, text=True)
         if result.returncode != 0:
             return jsonify({"success": False, "message": "Unable to register the user."}), 500
 
         cid = result.stdout.strip()
 
-        # Encrypt the CID using OpenSSL with the user's password
-        echo_proc = subprocess.Popen(
-            ['echo', '-n', cid],
-            stdout=subprocess.PIPE
-        )
-        openssl_proc = subprocess.Popen(
-            ['openssl', 'enc', '-aes-256-cbc', '-a', '-salt', '-pbkdf2', '-pass', f'pass:{password}'],
-            stdin=echo_proc.stdout,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        echo_proc.stdout.close()  # Allow echo_proc to receive SIGPIPE if openssl_proc exits
-
-        out, err = openssl_proc.communicate()
-        if openssl_proc.returncode != 0:
-            raise RuntimeError(f"OpenSSL encoding failed: {err.strip()}")
-
-        encrypted_info = out.strip()
-
         username = data.get('username', '')
-        access_control = {username: encrypted_info}
+        access_control = {username: cid}
 
         # Resolve latest access control IPNS record
         res = subprocess.run(
@@ -1240,7 +1250,7 @@ def register():
 
     finally:
         # Cleanup temp files safely
-        for path in [tmp_pubkey_path, tmp_user_path, tmp_acc_file_path]:
+        for path in [tmp_pubkey_path, tmp_user_path, tmp_enc_user_path, tmp_acc_file_path]:
             try:
                 if path and os.path.exists(path):
                     os.remove(path)

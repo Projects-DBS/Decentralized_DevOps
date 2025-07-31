@@ -336,18 +336,13 @@ def update_repo_ipnss(new_cid, version, ipns_cid, project_name, access_infos):
 def get_document_ipfs_cid(cid):
 
     try:
-        result = subprocess.run(
-            ['ipfs', 'cat', cid],
-            capture_output=True,
-            text=True,
-            timeout=15
-        )
+        result = subprocess.run(['ipfs', 'cat', cid],capture_output=True,text=True)
         if result.returncode != 0:
             return None
 
-        content_no_newlines = result.stdout.replace('\n', '')
-        info = json.loads(content_no_newlines)
-        return info
+        content_no_newlines = result.stdout.strip()
+
+        return content_no_newlines
     except Exception:
         return None
 
