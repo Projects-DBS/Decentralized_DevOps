@@ -45,7 +45,7 @@ RUN wget https://dist.ipfs.tech/ipfs-cluster-ctl/v1.1.4/ipfs-cluster-ctl_v1.1.4_
     mv ipfs-cluster-ctl/ipfs-cluster-ctl /usr/local/bin/
 
 COPY setup.sh /setup.sh
-COPY configs/admin_auth.enc /tmp/admin_auth.enc
+COPY configs/admin_auth.enc /home/${APP_USERNAME}/admin_auth.enc
 
 COPY app /home/${APP_USERNAME}/app/
 

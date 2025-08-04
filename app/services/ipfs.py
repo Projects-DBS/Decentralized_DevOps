@@ -2,8 +2,12 @@ from datetime import datetime
 import os
 import subprocess
 import tempfile
+import time
 from flask import json
-import requests
+import subprocess
+
+
+
 
 def run_cmd(cmds, input_data=None):
     try:
@@ -52,7 +56,7 @@ def ipfs_connect():
 def remove_user_info(ipns_access_control_key, username, ipns_publickey):
     try:
         resolve = subprocess.run(
-            ['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_access_control_key],
+            ['ipfs', 'name', 'resolve', '--nocache', '-r', f'/ipns/{ipns_access_control_key}'],
             capture_output=True, text=True
         )
         if resolve.returncode != 0:
@@ -93,7 +97,7 @@ def remove_user_info(ipns_access_control_key, username, ipns_publickey):
 
         new_cid = add.stdout.strip()
         publish = subprocess.run(
-            ['ipfs', 'name', 'publish', f'--key={ipns_access_control_key}', '--lifetime=17520h', new_cid],
+            ['ipfs', 'name', 'publish',  '--key=access_control', '--lifetime=17520h', f'/ipfs/{new_cid}'],
             capture_output=True, text=True
         )
         if publish.returncode != 0:
@@ -112,7 +116,7 @@ def remove_user_info(ipns_access_control_key, username, ipns_publickey):
 def remove_user_pubkey(ipns_user_pubkey_key, username):
     try:
         resolved = subprocess.run(
-            ['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_user_pubkey_key],
+            ['ipfs', 'name', 'resolve', '--nocache', '-r', f'/ipns/{ipns_user_pubkey_key}'],
             capture_output=True, text=True
         )
         if resolved.returncode != 0:
@@ -155,7 +159,7 @@ def remove_user_pubkey(ipns_user_pubkey_key, username):
 
         new_cid = add.stdout.strip()
         publish = subprocess.run(
-            ['ipfs', 'name', 'publish', '--lifetime=17520h', f'--key={ipns_user_pubkey_key}', new_cid],
+            ['ipfs', 'name', 'publish',  '--lifetime=17520h', '--key=user_publickey', f'/ipfs/{new_cid}'],
             capture_output=True, text=True
         )
         if publish.returncode != 0:
@@ -169,7 +173,7 @@ def remove_user_pubkey(ipns_user_pubkey_key, username):
 
 
 def list_all_users(ipns_key_access_control):
-    resolve = subprocess.run(['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_key_access_control], capture_output=True, text=True)
+    resolve = subprocess.run(['ipfs', 'name', 'resolve', '--nocache', '-r', f'/ipns/{ipns_key_access_control}'], capture_output=True, text=True)
     if resolve.returncode != 0:
         return []
     cid = resolve.stdout.strip()
@@ -185,7 +189,7 @@ def list_all_users(ipns_key_access_control):
     return [k for entry in info.get("access_control", []) if isinstance(entry, dict) for k in entry]
 
 def retrieve_access_control(ipns_cid, username):
-    ipns_cmd = ['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_cid]
+    ipns_cmd = ['ipfs', 'name', 'resolve', '--nocache', '-r', f'/ipns/{ipns_cid}']
     new_ipfs_output = subprocess.run(ipns_cmd, capture_output=True, text=True)
     resolved = new_ipfs_output.stdout.strip()
     cmd1 = ['ipfs', 'cat', resolved]
@@ -211,7 +215,7 @@ def update_project_record(new_cid, version, ipns_key_projects, project_name, acc
         "admin": "prod"
     }.get(role, "unknown")
 
-    cmd = ['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_key_projects]
+    cmd = ['ipfs', 'name', 'resolve', '--nocache', '-r', f'/ipns/{ipns_key_projects}']
     latest_cid_from_ipns = subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
     if not latest_cid_from_ipns:
         return False
@@ -264,7 +268,7 @@ def update_project_record(new_cid, version, ipns_key_projects, project_name, acc
     if not new_ipfs_output:
         return False
 
-    cmd_publish = ['ipfs', 'name', 'publish', '--key=' + ipns_key_projects, '--lifetime=17520h', new_ipfs_output]
+    cmd_publish = ['ipfs', 'name', 'publish',  '--key=projects', '--lifetime=17520h', f'/ipfs/{new_ipfs_output}']
     published_output = run_cmd(cmd_publish)
 
     if not published_output:
@@ -272,65 +276,6 @@ def update_project_record(new_cid, version, ipns_key_projects, project_name, acc
 
     return True
 
-def update_repo_ipnss(new_cid, version, ipns_cid, project_name, access_infos):
-    ipns_key = "cicd"
-    role = access_infos.get("role").lower()
-    tag = {
-        "developer": "dev",
-        "qa": "qa",
-        "admin": "prod"
-    }.get(role, "unknown")
-
-    latest_cid_from_ipns = run_cmd(['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_cid])
-    if not latest_cid_from_ipns or latest_cid_from_ipns[0] is False:
-        return False
-
-    latest_cid_from_ipns = latest_cid_from_ipns[0].split("/")[-1]
-
-    project_json = run_cmd(['ipfs', 'cat', latest_cid_from_ipns])
-    if not project_json or project_json[0] is False:
-        return False
-
-    try:
-        data = json.loads(project_json[0])
-        if 'projects' not in data:
-            data['projects'] = []
-    except Exception as e:
-        return False
-
-    project_versions = [
-        p.get('version', 1) for p in data['projects']
-        if isinstance(p, dict) and p.get('project_name') == project_name
-    ]
-    if project_versions:
-        version_to_use = max(project_versions) + 1
-    else:
-        version_to_use = 1
-
-    project_info = {
-        "project_name": project_name,
-        "cid": new_cid,
-        "version": version_to_use,
-        "timestamp": datetime.now().strftime("%Y-%m-%d:%H-%M-%S"),
-        "username": access_infos.get("username"),
-        "role": access_infos.get("role"),
-        "tag": tag
-    }
-    data['projects'].append(project_info)
-
-    updated_json_str = json.dumps(data, indent=2)
-    ipfs_add_cmd = ['ipfs-cluster-ctl', 'add', '-q', '-']
-    new_ipfs_output = run_cmd(ipfs_add_cmd, input_data=updated_json_str)
-    if not new_ipfs_output or new_ipfs_output[0] is False:
-        return False
-
-    cmd_publish = ['ipfs', 'name', 'publish', '--key=' + ipns_key, '--lifetime=17520h',new_ipfs_output[0]]
-    publish_output = run_cmd(cmd_publish)
-
-    if not publish_output or publish_output[0] is False:
-        return False
-
-    return True
 
 def get_document_ipfs_cid(cid):
 
@@ -344,3 +289,108 @@ def get_document_ipfs_cid(cid):
         return content_no_newlines
     except Exception:
         return None
+    
+
+
+
+
+def get_local_ip():
+    result = subprocess.run(['hostname', '-I'], stdout=subprocess.PIPE, text=True)
+    ips = result.stdout.strip().split()
+    return [ip for ip in ips if not ip.startswith('127.')]
+
+
+
+def get_ipfs_peers():
+    result = subprocess.run(['ipfs', 'swarm', 'peers'], stdout=subprocess.PIPE, text=True)
+    peers = result.stdout.strip().splitlines()
+    iplist = []
+    for peer in peers:
+        parts = peer.split('/')
+        if 'ip4' in parts:
+            idx = parts.index('ip4')
+            if len(parts) > idx + 1:
+                ip = parts[idx + 1]
+                iplist.append(ip)
+    iplist.extend(get_local_ip())
+    return list(set(iplist))
+
+
+def get_highest_uptime_ip(username, password):
+    ip_list = get_ipfs_peers()
+    best_ip = None
+    best_time = None
+    for ip in ip_list:
+        print(f"Checking IP: {ip}")
+        try:
+            result = subprocess.run(
+                ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no',
+                 f'{username}@{ip}', 'uptime -s'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=8
+            )
+            if result.returncode != 0:
+                print(f"SSH failed for {ip}: {result.stderr.strip()}")
+                continue
+            line = result.stdout.strip()
+            print(f"Uptime for {ip}: {line}")
+            try:
+                dt = datetime.strptime(line, '%Y-%m-%d %H:%M:%S')
+                if best_time is None or dt < best_time:
+                    best_time = dt
+                    best_ip = ip
+            except Exception as e:
+                print(f"Date parsing failed for {ip}: '{line}', error: {e}")
+                continue
+        except Exception as e:
+            print(f"Error checking {ip}: {e}")
+            continue
+    print(f"Best IP: {best_ip}")
+    return best_ip
+
+
+
+def republish_ipfs_keys(user, pw):
+    ip = get_highest_uptime_ip(user, pw)
+    if not ip:
+        return False
+    try:
+        key_lines = subprocess.check_output([
+            "sshpass", "-p", pw, "ssh", "-o", "StrictHostKeyChecking=no",
+            f"{user}@{ip}", "ipfs key list -l"
+        ], text=True, timeout=15).strip().splitlines()
+    except Exception:
+        return False
+
+    # Parse both key id and key name
+    keys = []
+    for line in key_lines:
+        parts = line.strip().split()
+        if len(parts) == 2:
+            keys.append((parts[0], parts[1]))  # (key_id, key_name)
+
+    for key_id, key_name in keys:
+        try:
+            resolved = subprocess.check_output([
+                "sshpass", "-p", pw, "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{user}@{ip}", f"ipfs name resolve --nocache -r {key_id}"
+            ], text=True, timeout=10).strip()
+            if '/ipfs/' in resolved:
+                cid = resolved.split('/ipfs/')[-1].split()[0]
+            else:
+                continue
+        except Exception:
+            continue
+
+        try:
+            publish_out = subprocess.check_output([
+                "sshpass", "-p", pw, "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{user}@{ip}", f"ipfs name publish --key={key_name} /ipfs/{cid}"
+            ], text=True, timeout=15)
+            if "Published to" not in publish_out:
+                continue
+        except Exception:
+            continue
+
+        time.sleep(2)
+
+    return True
