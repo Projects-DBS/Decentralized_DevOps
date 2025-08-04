@@ -2,8 +2,12 @@ from datetime import datetime
 import os
 import subprocess
 import tempfile
+import time
 from flask import json
-import requests
+import subprocess
+
+
+
 
 def run_cmd(cmds, input_data=None):
     try:
@@ -344,3 +348,108 @@ def get_document_ipfs_cid(cid):
         return content_no_newlines
     except Exception:
         return None
+    
+
+
+
+
+def get_local_ip():
+    result = subprocess.run(['hostname', '-I'], stdout=subprocess.PIPE, text=True)
+    ips = result.stdout.strip().split()
+    return [ip for ip in ips if not ip.startswith('127.')]
+
+
+
+def get_ipfs_peers():
+    result = subprocess.run(['ipfs', 'swarm', 'peers'], stdout=subprocess.PIPE, text=True)
+    peers = result.stdout.strip().splitlines()
+    iplist = []
+    for peer in peers:
+        parts = peer.split('/')
+        if 'ip4' in parts:
+            idx = parts.index('ip4')
+            if len(parts) > idx + 1:
+                ip = parts[idx + 1]
+                iplist.append(ip)
+    iplist.extend(get_local_ip())
+    return list(set(iplist))
+
+
+def get_highest_uptime_ip(username, password):
+    ip_list = get_ipfs_peers()
+    best_ip = None
+    best_time = None
+    for ip in ip_list:
+        print(f"Checking IP: {ip}")
+        try:
+            result = subprocess.run(
+                ['sshpass', '-p', password, 'ssh', '-o', 'StrictHostKeyChecking=no',
+                 f'{username}@{ip}', 'uptime -s'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=8
+            )
+            if result.returncode != 0:
+                print(f"SSH failed for {ip}: {result.stderr.strip()}")
+                continue
+            line = result.stdout.strip()
+            print(f"Uptime for {ip}: {line}")
+            try:
+                dt = datetime.strptime(line, '%Y-%m-%d %H:%M:%S')
+                if best_time is None or dt < best_time:
+                    best_time = dt
+                    best_ip = ip
+            except Exception as e:
+                print(f"Date parsing failed for {ip}: '{line}', error: {e}")
+                continue
+        except Exception as e:
+            print(f"Error checking {ip}: {e}")
+            continue
+    print(f"Best IP: {best_ip}")
+    return best_ip
+
+
+
+
+def republish_ipfs_keys(user, pw):
+    ip = get_highest_uptime_ip(user, pw)
+    if not ip:
+        return False
+    try:
+        key_lines = subprocess.check_output([
+            "sshpass", "-p", pw, "ssh", "-o", "StrictHostKeyChecking=no",
+            f"{user}@{ip}", "ipfs key list -l"
+        ], text=True, timeout=15).strip().splitlines()
+    except Exception:
+        return False
+
+    keys = []
+    for line in key_lines:
+        parts = line.strip().split()
+        if len(parts) == 2:
+            keys.append(parts[0])
+
+    for key_id in keys:
+        try:
+            resolved = subprocess.check_output([
+                "sshpass", "-p", pw, "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{user}@{ip}", f"ipfs name resolve --nocache -r {key_id}"
+            ], text=True, timeout=10).strip()
+            if '/ipfs/' in resolved:
+                cid = resolved.split('/ipfs/')[-1].split()[0]
+            else:
+                continue
+        except Exception:
+            continue
+
+        try:
+            publish_out = subprocess.check_output([
+                "sshpass", "-p", pw, "ssh", "-o", "StrictHostKeyChecking=no",
+                f"{user}@{ip}", f"ipfs name publish --key={key_id} /ipfs/{cid}"
+            ], text=True, timeout=15)
+            if "Published to" not in publish_out:
+                continue
+        except Exception:
+            continue
+
+        time.sleep(2)
+
+    return True

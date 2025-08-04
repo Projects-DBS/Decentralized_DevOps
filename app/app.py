@@ -7,7 +7,7 @@ import tempfile
 from time import sleep
 import zipfile
 from flask import Flask, json, jsonify, make_response, render_template, request, redirect, send_file, url_for, flash, session
-from services.ipfs import ipfs_connect, remove_user_info, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
+from services.ipfs import ipfs_connect, remove_user_info, republish_ipfs_keys, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
 from services.crypto import decrypt_openssl_subprocess
 from services.session import check_session
 from werkzeug.utils import secure_filename
@@ -264,8 +264,11 @@ def login():
                 enc_user_info = get_document_ipfs_cid(cid)
                 access_infos = decrypt_openssl_subprocess(enc_user_info, password)
                 access_info = json.loads(access_infos)
+                
+                
 
                 session.clear()
+                
 
                 session.permanent = True
                 session["username"] = access_info.get("username")
@@ -276,11 +279,13 @@ def login():
                 session["access_info"] = access_info
                 session["organization"] = access_info.get("organization", [])
                 session["start_time"] = datetime.now(timezone.utc).isoformat()
-
                 immutable_application_log(session, "login", "login_page", "Login successful", ipns_key_logs)
+
+                
                 
 
                 if access_info.get("role") == "admin":
+                    
                     return redirect(url_for('admin_dashboard'))
                 elif access_info.get("role") == "developer":
                     return redirect(url_for('developer_dashboard'))
@@ -301,7 +306,22 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/sync_nodes", methods=["POST"])
+def syncing_nodes():
+    try:
+        status = check_session( session,"admin_dashboard")
+        if status != True:
+            flash(status)
+            return redirect(url_for("login"))
+        password = request.form.get("password", "")
+        status = republish_ipfs_keys("guest", password)
 
+        if status == False:
+            return jsonify({"status": False, "Message": "Unable to update the nodes."}), 500
+        return jsonify({"status": True, "Message": "All node available are updated."}), 200
+
+    except Exception as msg:
+        return jsonify({"status": False, "Message": msg}), 500
 
 @app.route("/organizations", methods=["GET"])
 def list_org():
@@ -992,7 +1012,7 @@ def trigger_ci_build():
         updated_cid = ipfs_result.stdout.strip()
 
         publish_result = subprocess.run(
-            ["ipfs", "name", "publish", "--key=project_builds", '--lifetime=17520h', updated_cid],
+            ["ipfs", "name", "publish", f"--key={ipns_key_project_builds}", '--lifetime=17520h', updated_cid],
             capture_output=True,
             text=True
         )
@@ -1148,7 +1168,7 @@ def register():
         cid = res03.stdout.strip()
 
         res04 = subprocess.run(
-            ["ipfs", "name", "publish", "--key=user_publickey", '--lifetime=17520h', cid],
+            ["ipfs", "name", "publish", f"--key={ipns_key_userpublickey}", '--lifetime=17520h', cid],
             capture_output=True,
             text=True
         )
@@ -1253,7 +1273,7 @@ def register():
         new_cid = new_ipfs_output.stdout.strip()
 
         publish_res = subprocess.run(
-            ["ipfs", "name", "publish", "--key=access_control", '--lifetime=17520h', new_cid],
+            ["ipfs", "name", "publish", f"--key={ipns_key_access_control}", '--lifetime=17520h', new_cid],
             capture_output=True,
             text=True
         )
