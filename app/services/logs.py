@@ -1,8 +1,10 @@
+import asyncio
 import subprocess
 import json
 import tempfile
 import os
 import datetime
+import time
 
 def get_host_ip():
     try:
@@ -16,10 +18,10 @@ def immutable_application_log(session, operation, page, message, ipns_log_key):
     try:
         username = session.get('username')
         session_started = session.get('start_time')
-        role = session.get('role')
+        role = session.get('role')    
         server_ip = get_host_ip()
-        timestamp = datetime.datetime.utcnow().isoformat() + "Z"
 
+        timestamp = datetime.datetime.utcnow().isoformat() + "Z"
         log_entry = {
             "username": username,
             "session_started": session_started,
@@ -31,109 +33,76 @@ def immutable_application_log(session, operation, page, message, ipns_log_key):
             "timestamp": timestamp
         }
 
-        resolve = subprocess.run(
-            ['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_log_key],
-            capture_output=True, text=True, check=False
-        )
-        if resolve.returncode != 0:
-            print("IPNS resolve failed")
-            return False, "IPNS resolve failed"
+        cmd_resolve = ['ipfs', 'name', 'resolve', '--nocache', '-r', f'{ipns_log_key}']
+        resolve = subprocess.run(cmd_resolve, capture_output=True, text=True)
+        mapping_cid = resolve.stdout.strip().split('/')[-1]
+        if not mapping_cid:
+            return False, f"Failed to resolve IPNS: {resolve.stderr.strip()}"
 
-        mapping_cid = resolve.stdout.strip().split("/")[-1]
-        cat = subprocess.run(
-            ['ipfs', 'cat', mapping_cid],
-            capture_output=True, text=True, check=False
-        )
-        if cat.returncode != 0:
-            print("Failed to fetch server log info")
-            return False, "Failed to fetch server log info"
-
-        try:
-            log_map = json.loads(cat.stdout.strip())
-            if not isinstance(log_map, dict):
-                print("Invalid log info format")
-                return False, "Invalid log info format"
-        except Exception:
-            print("Failed to parse log info")
-            return False, "Failed to parse log info"
+        cmd_cat_map = ['ipfs', 'cat', mapping_cid]
+        map_res = subprocess.run(cmd_cat_map, capture_output=True, text=True)
+        if map_res.returncode != 0:
+            return False, f"Failed to fetch mapping CID: {map_res.stderr.strip()}"
+        log_map = json.loads(map_res.stdout.strip().replace('\n', '').replace('\r',''))
+      
 
         logs = []
         if server_ip in log_map:
             existing_cid = log_map[server_ip]
-            cat_logs = subprocess.run(
-                ['ipfs', 'cat', existing_cid],
-                capture_output=True, text=True, check=False
-            )
-            if cat_logs.returncode != 0:
-                print("Failed to fetch existing logs")
-                return False, "Failed to fetch existing logs"
-            try:
-                logs = json.loads(cat_logs.stdout.strip())
-                if not isinstance(logs, list):
-                    print("Corrupted log array")
-                    return False, "Corrupted log array"
-            except Exception:
-                print("Failed to parse existing logs")
-                return False, "Failed to parse existing logs"
+            cmd_cat_logs = ['ipfs', 'cat', existing_cid]
+            logs_res = subprocess.run(cmd_cat_logs, capture_output=True, text=True)
+            if logs_res.returncode == 0:
+                logs = json.loads(logs_res.stdout.strip().replace('\n', '').replace('\r',''))
+            logs.append(log_entry)
+        else:
+            logs.append(log_entry)
+        
+    
 
-        logs.append(log_entry)
+        
 
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmpfile:
-            json.dump(logs, tmpfile)
-            tmpfile.flush()
-            tmp_logs_path = tmpfile.name
-        try:
-            add_logs = subprocess.run(
-                ['ipfs-cluster-ctl', 'add', '-q', tmp_logs_path],
-                capture_output=True, text=True, check=False
-            )
-            if add_logs.returncode != 0:
-                print("Failed to add logs to IPFS cluster")
-                return False, "Failed to add logs to IPFS cluster"
-            new_log_cid = add_logs.stdout.strip()
-        finally:
-            if os.path.exists(tmp_logs_path):
-                os.unlink(tmp_logs_path)
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as tmp_logs:
+            json.dump(logs, tmp_logs)
+            tmp_logs_path = tmp_logs.name
+
+        add_logs_cmd = ['ipfs-cluster-ctl', 'add' , tmp_logs_path, '-q']
+        add_logs = subprocess.run(add_logs_cmd, capture_output=True, text=True)
+        os.unlink(tmp_logs_path)
+        new_log_cid = add_logs.stdout.strip()
+        if not new_log_cid:
+            return False, f"Failed to add logs to IPFS: {add_logs.stderr.strip()}"
 
         log_map[server_ip] = new_log_cid
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as tmp_map:
+            json.dump(log_map, tmp_map)
+            tmp_map_path = tmp_map.name
 
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmpfile_info:
-            json.dump(log_map, tmpfile_info)
-            tmpfile_info.flush()
-            tmp_info_path = tmpfile_info.name
-        try:
-            add_info = subprocess.run(
-                ['ipfs-cluster-ctl', 'add', '-q', tmp_info_path],
-                capture_output=True, text=True, check=False
-            )
-            if add_info.returncode != 0:
-                print(f"Failed to add log map to IPFS cluster")
-                return False, "Failed to add log map to IPFS cluster"
-            new_map_cid = add_info.stdout.strip()
-        finally:
-            if os.path.exists(tmp_info_path):
-                os.unlink(tmp_info_path)
+        add_map_cmd = ['ipfs-cluster-ctl', 'add' , tmp_map_path, '-q']
+        add_map = subprocess.run(add_map_cmd, capture_output=True, text=True)
+        os.unlink(tmp_map_path)
+        new_map_cid = add_map.stdout.strip()
+        if not new_map_cid:
+            return False, f"Failed to add log map to IPFS: {add_map.stderr.strip()}"
 
-        publish = subprocess.run(
-            ['ipfs', 'name', 'publish', f'--key={ipns_log_key}', '--lifetime=17520h', new_map_cid],
-            capture_output=True, text=True, check=False
-        )
+        cmd_publish = ['ipfs', 'name', 'publish', '--key=logs', '--lifetime=24h', f'/ipfs/{new_map_cid}']
+        publish = subprocess.run(cmd_publish, capture_output=True, text=True)
         if publish.returncode != 0:
-            print(f"Failed to publish new log info to IPNS: {publish.stderr}")
-            return False, f"Failed to publish new log info to IPNS: {publish.stderr}"
-
-
+            return False, f"Failed to publish new log map to IPNS: {publish.stderr.strip()}"
 
         return True, "Success"
-
     except Exception as e:
-        print(e)
         return False, f"Exception: {str(e)}"
+
+
+
+
+
+
 
 def get_logs(ipns_key):
     try:
         resolve_result = subprocess.run(
-            ['ipfs', 'name', 'resolve', '--nocache', '-r', ipns_key],
+            ['ipfs', 'name', 'resolve', '--nocache', '-r', f'/ipns/{ipns_key}'],
             capture_output=True, text=True
         )
         mapping_cid = resolve_result.stdout.strip().split("/")[-1]

@@ -5,6 +5,7 @@ import socket
 import subprocess
 import tempfile
 from time import sleep
+import time
 import zipfile
 from flask import Flask, json, jsonify, make_response, render_template, request, redirect, send_file, url_for, flash, session
 from services.ipfs import ipfs_connect, remove_user_info, republish_ipfs_keys, retrieve_access_control, get_document_ipfs_cid, update_project_record, ipns_keys, list_all_users
@@ -43,64 +44,32 @@ ipns_key_userpublickey = keys.get("user_publickey")
 
 
 
-def resolve_ipns(ipns_key):
+def resolve_ipns():
     try:
         result = subprocess.run(
-            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key],
+            ["ipfs", "name", "resolve", "--nocache", "-r", f'{ipns_key_misc}'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=True,
             text=True
         )
         cid = result.stdout.strip().replace("/ipfs/", "")
-        return cid
-    except subprocess.CalledProcessError as e:
-        return None
-
-def cat_ipfs(cid):
-    try:
-        result = subprocess.run(
-            ["ipfs", "cat", cid],
+        repub = subprocess.run(
+            ["ipfs", "name", "publish", "--key=misc", f'/ipfs/{cid}'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=True,
             text=True
         )
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        return None
+        repub.stdout.strip().replace("\n", "")
+        
+    except:
+        pass
 
 
+    
 
-def initialize_ipns_data():
-    categories = {
-        "access_control": ipns_key_access_control,
-        "projects": ipns_key_projects,
-        "project_builds": ipns_key_project_builds,
-        "misc": ipns_key_misc,
-        "logs": ipns_key_logs,
-        "roles": ipns_key_roles,
-        "user_publickey": ipns_key_userpublickey
-    }
-
-    for category, key_list in categories.items():
-        if not isinstance(key_list, list):
-            continue
-
-        for ipns_key in key_list:
-            if not isinstance(ipns_key, str) or not ipns_key.strip():
-                continue
-
-            cid = resolve_ipns(ipns_key)
-            if cid:
-                content = cat_ipfs(cid)
-
-
-    return True
-
-
-
-initialize_ipns_data()
+time.sleep(30)
 
 app = Flask(__name__)
 
@@ -268,7 +237,7 @@ def login():
                 
 
                 session.clear()
-                
+                resolve_ipns()
 
                 session.permanent = True
                 session["username"] = access_info.get("username")
@@ -279,8 +248,11 @@ def login():
                 session["access_info"] = access_info
                 session["organization"] = access_info.get("organization", [])
                 session["start_time"] = datetime.now(timezone.utc).isoformat()
-                immutable_application_log(session, "login", "login_page", "Login successful", ipns_key_logs)
-
+                resolve_ipns()
+                s,m = immutable_application_log(session, "login", "login_page", "Login successful", ipns_key_logs)
+                if s == False:
+                    print(f"Login logger failed: {m}")
+                 
                 
                 
 
@@ -346,7 +318,7 @@ def list_roles():
             flash(status)
             return redirect(url_for("login"))
         result = subprocess.run(
-            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_roles],
+            ["ipfs", "name", "resolve", "--nocache", "-r", f'/ipns/{ipns_key_roles}'],
             capture_output=True,
             text=True
         )
@@ -430,7 +402,7 @@ def get_projects():
         return redirect(url_for("login"))
     try:
         new_ipfs_output = subprocess.run(
-            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_projects],
+            ["ipfs", "name", "resolve", "--nocache", "-r", f'/ipns/{ipns_key_projects}'],
             capture_output=True,
             text=True
         )
@@ -457,7 +429,7 @@ def build_info():
         flash(status)
         return redirect(url_for("login"))
     result = subprocess.run(
-        ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_project_builds],
+        ["ipfs", "name", "resolve", "--nocache", "-r", f'/ipns/{ipns_key_project_builds}'],
         capture_output=True,
         text=True
     )
@@ -842,7 +814,7 @@ def get_all_projects():
         return redirect(url_for("login"))
     try:
         new_ipfs_output = subprocess.run(
-            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_projects],
+            ["ipfs", "name", "resolve", "--nocache", "-r", f'/ipns/{ipns_key_projects}'],
             capture_output=True,
             text=True
         )
@@ -949,7 +921,7 @@ def trigger_ci_build():
         new_cid = ipfs_result.stdout.strip()
 
         resolve_result = subprocess.run(
-            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_project_builds],
+            ["ipfs", "name", "resolve", "--nocache", "-r", f'/ipns/{ipns_key_project_builds}'],
             capture_output=True,
             text=True
         )
@@ -1012,7 +984,7 @@ def trigger_ci_build():
         updated_cid = ipfs_result.stdout.strip()
 
         publish_result = subprocess.run(
-            ["ipfs", "name", "publish", f"--key={ipns_key_project_builds}", '--lifetime=17520h', updated_cid],
+            ["ipfs", "name", "publish",  "--key=project_builds", '--lifetime=17520h', f'/ipfs/{updated_cid}'],
             capture_output=True,
             text=True
         )
@@ -1120,7 +1092,7 @@ def register():
         return jsonify({"success": False, "message": "Username does not match comment in the public key"}), 400
 
     res01 = subprocess.run(
-        ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_userpublickey],
+        ["ipfs", "name", "resolve", "--nocache", "-r", f'/ipns/{ipns_key_userpublickey}'],
         capture_output=True,
         text=True
     )
@@ -1168,7 +1140,7 @@ def register():
         cid = res03.stdout.strip()
 
         res04 = subprocess.run(
-            ["ipfs", "name", "publish", f"--key={ipns_key_userpublickey}", '--lifetime=17520h', cid],
+            ["ipfs", "name", "publish",  "--key=user_publickey", '--lifetime=17520h', f'/ipfs/{cid}'],
             capture_output=True,
             text=True
         )
@@ -1220,7 +1192,7 @@ def register():
         access_control = {username: cid}
 
         res = subprocess.run(
-            ["ipfs", "name", "resolve", "--nocache", "-r", ipns_key_access_control],
+            ["ipfs", "name", "resolve", "--nocache", "-r", f'/ipns/{ipns_key_access_control}'],
             capture_output=True,
             text=True
         )
@@ -1273,7 +1245,7 @@ def register():
         new_cid = new_ipfs_output.stdout.strip()
 
         publish_res = subprocess.run(
-            ["ipfs", "name", "publish", f"--key={ipns_key_access_control}", '--lifetime=17520h', new_cid],
+            ["ipfs", "name", "publish",  "--key=access_control", '--lifetime=17520h', f'/ipfs/{new_cid}'],
             capture_output=True,
             text=True
         )

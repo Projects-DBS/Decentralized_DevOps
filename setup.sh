@@ -39,8 +39,11 @@ if [ ! -f "$check_setup" ]; then
     chown -R "${APP_USERNAME}:${APP_USERNAME}" "${HOME_DIR}/.ipfs"
   fi
 
-  sudo -u "${APP_USERNAME}" ipfs config Routing.Type dhtclient
-  sudo -u "${APP_USERNAME}" ipfs config --json Experimental.IPNSPubsub true || true
+  sudo -u "${APP_USERNAME}" ipfs config Routing.Type dht
+  sudo -u "${APP_USERNAME}" ipfs config --json Ipns.RepublishPeriod '"1h"'
+  
+  sudo -u "${APP_USERNAME}" ipfs config --json Ipns.UsePubsub true
+  sudo -u "${APP_USERNAME}" ipfs config --json Experimental.IPNSPubsub true 
 
   if [ -d "/home/${APP_USERNAME}/ipns_keys" ] && compgen -G "/home/${APP_USERNAME}/ipns_keys/*.key" > /dev/null; then
     for keyfile in /home/${APP_USERNAME}/ipns_keys/*.key; do
@@ -51,7 +54,8 @@ if [ ! -f "$check_setup" ]; then
   fi
 
   service ssh start
-  sudo -u "${APP_USERNAME}" ipfs config --json Ipns.UsePubsub true
+  sudo -u "${APP_USERNAME}" ipfs config --json Experimental.IPNSPubsub true
+
   sleep 3
   sudo -u "${APP_USERNAME}" ipfs daemon --enable-namesys-pubsub &
   sleep 10
@@ -72,7 +76,7 @@ if [ ! -f "$check_setup" ]; then
     json_data=\$(jq -n --arg admin \"\$cid\" '{\"access_control\": [{\"admin\":\$admin}]}')
     echo \"\$json_data\" > ${HOME_DIR}/db.json
     dbcid=\$(ipfs-cluster-ctl add -q ${HOME_DIR}/db.json)
-    ipns_output=\$(ipfs name publish --key=\"access_control\" --lifetime=17520h /ipfs/\$dbcid)
+    ipns_output=\$(ipfs name publish  --key=\"access_control\" --lifetime=17520h /ipfs/\$dbcid)
     ipns_key=\$(echo \"\$ipns_output\" | awk '{print \$3}' | cut -d\":\" -f1)
     rm ${HOME_DIR}/db.json 
   "
@@ -81,7 +85,7 @@ if [ ! -f "$check_setup" ]; then
     tmpfile=$(mktemp)
     echo "{\"projects\": []}" > "$tmpfile"
     cid=$(ipfs-cluster-ctl add -q "$tmpfile")
-    ipns_output=$(ipfs name publish --key="projects" --lifetime=17520h /ipfs/"$cid")
+    ipns_output=$(ipfs name publish  --key="projects" --lifetime=17520h /ipfs/"$cid")
     ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
     rm "$tmpfile"
   '
@@ -103,7 +107,7 @@ EOF
       rm "$tmpfile"
       exit 1
     fi
-    ipns_output=$(ipfs name publish --key="roles" --lifetime=17520h /ipfs/"$cid")
+    ipns_output=$(ipfs name publish  --key="roles" --lifetime=17520h /ipfs/"$cid")
     if [ $? -ne 0 ]; then
       echo "Error: IPNS publish failed."
       rm "$tmpfile"
@@ -123,7 +127,7 @@ EOF
       rm \"\$tmpfile\"
       exit 1
     fi
-    ipns_output=\$(ipfs name publish --key=\"user_publickey\" --lifetime=17520h /ipfs/\"\$cid\")
+    ipns_output=\$(ipfs name publish  --key=\"user_publickey\" --lifetime=17520h /ipfs/\"\$cid\")
     if [ \$? -ne 0 ]; then
       echo \"Error: IPNS publish failed.\"
       rm \"\$tmpfile\"
@@ -137,7 +141,7 @@ EOF
     tmpfile=$(mktemp)
     echo "{\"project_builds\": []}" > "$tmpfile"
     cid=$(ipfs-cluster-ctl add -q "$tmpfile")
-    ipns_output=$(ipfs name publish --key="project_builds" --lifetime=17520h /ipfs/"$cid")
+    ipns_output=$(ipfs name publish  --key="project_builds" --lifetime=17520h /ipfs/"$cid")
     ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
     rm "$tmpfile"
   '
@@ -146,7 +150,7 @@ EOF
     tmpfile=$(mktemp)
     echo "{}" > "$tmpfile"
     cid=$(ipfs-cluster-ctl add -q "$tmpfile")
-    ipns_output=$(ipfs name publish --key="logs" --lifetime=17520h /ipfs/"$cid")
+    ipns_output=$(ipfs name publish  --key="logs" --lifetime=17520h /ipfs/"$cid")
     ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
     rm "$tmpfile"
   '
@@ -155,7 +159,7 @@ EOF
     tmpfile=$(mktemp)
     echo "{\"misc\": []}" > "$tmpfile"
     cid=$(ipfs-cluster-ctl add -q "$tmpfile")
-    ipns_output=$(ipfs name publish --key="misc" --lifetime=17520h /ipfs/"$cid")
+    ipns_output=$(ipfs name publish  --key="misc" --lifetime=17520h /ipfs/"$cid")
     ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)
     rm "$tmpfile"
   '
@@ -165,7 +169,8 @@ EOF
 else
   echo "[INFO] Skipping setup."
   service ssh start
-  sudo -u "${APP_USERNAME}" ipfs config --json Ipns.UsePubsub true
+  sudo -u "${APP_USERNAME}" ipfs config --json Experimental.IPNSPubsub true
+
   sleep 3
 
   sudo -u "${APP_USERNAME}" ipfs daemon --enable-namesys-pubsub &
