@@ -3,8 +3,8 @@ import os
 import re
 import socket
 import subprocess
+import sys
 import tempfile
-from time import sleep
 import time
 import zipfile
 from flask import Flask, json, jsonify, make_response, render_template, request, redirect, send_file, url_for, flash, session
@@ -44,32 +44,29 @@ ipns_key_userpublickey = keys.get("user_publickey")
 
 
 
-def resolve_ipns():
-    try:
-        result = subprocess.run(
-            ["ipfs", "name", "resolve", "--nocache", "-r", f'{ipns_key_misc}'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-            text=True
-        )
-        cid = result.stdout.strip().replace("/ipfs/", "")
-        repub = subprocess.run(
-            ["ipfs", "name", "publish", "--key=misc", f'/ipfs/{cid}'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-            text=True
-        )
-        repub.stdout.strip().replace("\n", "")
-        
-    except:
-        pass
-
+def initialize():
+    last = 5
+    c = 0
+    while True:
+        s, m = immutable_application_log(session, "Initialize", "Initializing", f"Initializing IPNS",ipns_key_logs)
+        time.sleep(2)
+        c = c + 1
+        if s == True:
+            False
+            break
+        if c == last:
+            print("IPNS Logger failed.")
+            False
+            break
 
     
+    
 
-time.sleep(30)
+
+
+initialize()
+
+
 
 app = Flask(__name__)
 
@@ -203,12 +200,14 @@ def cicd_page():
 
 
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
 
         password = request.form.get("password", "")
+        immutable_application_log(session, "Login", "Login Page", f"Initialized Login Page",ipns_key_logs)
+
 
         if not (3 <= len(username) <= 32) or not username.replace('_', '').isalnum():
             flash("Invalid username. Use 3 to 32 characters: letters, numbers and underscores only.")
@@ -237,7 +236,6 @@ def login():
                 
 
                 session.clear()
-                resolve_ipns()
 
                 session.permanent = True
                 session["username"] = access_info.get("username")
@@ -248,20 +246,22 @@ def login():
                 session["access_info"] = access_info
                 session["organization"] = access_info.get("organization", [])
                 session["start_time"] = datetime.now(timezone.utc).isoformat()
-                resolve_ipns()
-                s,m = immutable_application_log(session, "login", "login_page", "Login successful", ipns_key_logs)
-                if s == False:
-                    print(f"Login logger failed: {m}")
+                
+
                  
                 
                 
 
                 if access_info.get("role") == "admin":
+                    immutable_application_log(session, "login", "login_page", "Admin Login successful", ipns_key_logs)
                     
                     return redirect(url_for('admin_dashboard'))
+                
                 elif access_info.get("role") == "developer":
+                    immutable_application_log(session, "login", "login_page", "Dev Login successful", ipns_key_logs)
                     return redirect(url_for('developer_dashboard'))
                 elif access_info.get("role") == "qa":
+                    immutable_application_log(session, "login", "login_page", "QA Login successful", ipns_key_logs)
                     return redirect(url_for('qa_dashboard'))
 
                 flash("Role not recognized.")
