@@ -62,7 +62,7 @@ RUN chown -R ${APP_USERNAME}:$APP_USERNAME /tmp/
 RUN chown -R ${APP_USERNAME}:$APP_USERNAME /home/${APP_USERNAME}/app/
 RUN pip install -r /home/${APP_USERNAME}/app/requirements.txt
 
-EXPOSE 22  1000 1001 1002 1003
+EXPOSE 22
 
 
 ENV FLASK_APP=/home/${APP_USERNAME}/app/app.py
