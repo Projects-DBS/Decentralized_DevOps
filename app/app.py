@@ -55,7 +55,6 @@ def initialize():
             False
             break
         if c == last:
-            print("IPNS Logger failed.")
             False
             break
 
@@ -91,7 +90,7 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = True       
 
 
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'     
+app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'     
 
 
 

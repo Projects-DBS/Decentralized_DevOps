@@ -6,11 +6,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
-
 <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
-    <form id="loginForm" method="post" autocomplete="off" class="card p-4 shadow" style="min-width: 320px;">
+    <form id="authForm" method="post" autocomplete="off" class="card p-4 shadow" style="min-width: 320px;">
         <h3 class="mb-3 text-center">Login to IPFS DCICD</h3>
-
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             <div class="alert alert-danger py-2 px-3 mb-3">
@@ -20,38 +18,34 @@
             </div>
           {% endif %}
         {% endwith %}
-
         <div class="mb-3">
-            <label for="username" class="form-label mb-1">Username</label>
-            <input type="text" class="form-control" id="username" name="username" required>
+            <label for="userField" class="form-label mb-1">Username</label>
+            <input type="text" class="form-control" id="userField" name="username" required>
         </div>
-
         <div class="mb-3">
-            <label for="password" class="form-label mb-1">Password</label>
-            <input type="password" class="form-control" id="password" name="password" required>
+            <label for="passField" class="form-label mb-1">Password</label>
+            <input type="password" class="form-control" id="passField" name="password" required>
         </div>
-
         <button type="submit" class="btn btn-primary w-100">Login</button>
     </form>
 </div>
-
 <script>
-
-document.getElementById('loginForm').onsubmit = function(e) {
-    var uname = document.getElementById('username').value.trim();
-    var pass = document.getElementById('password').value;
-    if (uname.length < 3 || uname.length > 32 || !/^\w+$/.test(uname)) {
+document.getElementById('authForm').addEventListener('submit', function(event) {
+    var userInput = document.getElementById('userField').value.trim();
+    var passInput = document.getElementById('passField').value;
+    
+    if (userInput.length < 3 || userInput.length > 32 || !/^\w+$/.test(userInput)) {
         alert("Username must be between 3 to 32 letters, numbers or underscores in it.");
-        e.preventDefault();
+        event.preventDefault();
         return false;
     }
-    if (pass.length < 6 || pass.length > 32) {
+    
+    if (passInput.length < 6 || passInput.length > 32) {
         alert("Password must be between 6 to 32 characters in it.");
-        e.preventDefault();
+        event.preventDefault();
         return false;
     }
-}
+});
 </script>
-
 </body>
 </html>

@@ -84,7 +84,7 @@ def immutable_application_log(session, operation, page, message, ipns_log_key):
         if not new_map_cid:
             return False, f"Failed to add log map to IPFS: {add_map.stderr.strip()}"
 
-        cmd_publish = ['ipfs', 'name', 'publish', '--key=logs', '--lifetime=24h', f'/ipfs/{new_map_cid}']
+        cmd_publish = ["ipfs", "name", "publish", "--key=logs", "--lifetime=24h", f"/ipfs/{new_map_cid}"]
         publish = subprocess.run(cmd_publish, capture_output=True, text=True)
         if publish.returncode != 0:
             return False, f"Failed to publish new log map to IPNS: {publish.stderr.strip()}"
