@@ -3,12 +3,12 @@
 KEYNAME="user_publickey"
 MAXIMUM_WAIT=120
 WAITINTERVAL=3
-ELAPSED=0
+ELAP=0
 
 while ! ipfs id > /dev/null 2>&1; do
     sleep $WAITINTERVAL
-    ELAPSED=$((ELAPSED + WAITINTERVAL))
-    if [ $ELAPSED -ge $MAXIMUM_WAIT ]; then
+    ELAP=$((ELAP + WAITINTERVAL))
+    if [ $ELAP -ge $MAXIMUM_WAIT ]; then
         exit 2
     fi
 done
@@ -18,9 +18,9 @@ if [ -z "$IPNS_KEY" ]; then
     exit 2
 fi
 
-ELAPSED=0
+ELAP=0
 
-while [ $ELAPSED -lt $MAXIMUM_WAIT ]; do
+while [ $ELAP -lt $MAXIMUM_WAIT ]; do
     CID=$(ipfs name resolve --nocache -r /ipns/"$IPNS_KEY" 2>/dev/null | awk -F/ '{print $3}')
     if [ -n "$CID" ]; then
         DATA=$(ipfs cat "$CID" 2>/dev/null)
@@ -34,8 +34,8 @@ while [ $ELAPSED -lt $MAXIMUM_WAIT ]; do
         fi
     fi
     sleep $WAITINTERVAL
-    ELAPSED=$((ELAPSED + WAITINTERVAL))
+    ELAP=$((ELAP + WAITINTERVAL))
 done
 
-echo "Could not get IPFS data in time thus using password authentication."
+echo "Could not get the IPFS data in time thus using password authentication."
 exit 2

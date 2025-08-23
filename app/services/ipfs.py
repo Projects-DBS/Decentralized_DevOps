@@ -339,7 +339,6 @@ def get_highest_uptime_ip(username, password):
                     best_time = dt
                     best_ip = ip
             except Exception as e:
-                print(f"Date parsing failed for {ip}: '{line}', error: {e}")
                 continue
         except Exception as e:
             print(f"Error checking {ip}: {e}")
@@ -361,12 +360,11 @@ def republish_ipfs_keys(user, pw):
     except Exception:
         return False
 
-    # Parse both key id and key name
     keys = []
     for line in key_lines:
         parts = line.strip().split()
         if len(parts) == 2:
-            keys.append((parts[0], parts[1]))  # (key_id, key_name)
+            keys.append((parts[0], parts[1]))  
 
     for key_id, key_name in keys:
         try:

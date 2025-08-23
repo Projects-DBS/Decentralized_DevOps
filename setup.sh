@@ -12,7 +12,7 @@ PORT=1000
 
 pid=$(netstat -tlnp 2>/dev/null | awk -v port=":$PORT" '$4 ~ port {split($7,a,"/"); print a[1]}')
 if [ -n "$pid" ]; then
-  echo "Killing process on port $PORT (pid: $pid)"
+  echo "Killing port $PORT (pid: $pid)"
   kill -9 $pid
 fi
 
@@ -39,7 +39,7 @@ if [ ! -f "$check_setup" ]; then
     chown -R "${APP_USERNAME}:${APP_USERNAME}" "${HOME_DIR}/.ipfs"
   fi
 
-  sudo -u "${APP_USERNAME}" ipfs config Routing.Type dht
+  sudo -u "${APP_USERNAME}" ipfs config Routing.Type auto
   sudo -u "${APP_USERNAME}" ipfs config --json Ipns.RepublishPeriod '"1h"'
   
   sudo -u "${APP_USERNAME}" ipfs config --json Ipns.UsePubsub true
@@ -103,7 +103,7 @@ if [ ! -f "$check_setup" ]; then
 EOF
     cid=$(ipfs-cluster-ctl add -q "$tmpfile")
     if [ -z "$cid" ]; then
-      echo "Error: Failed to get CID from IPFS Cluster."
+      echo "Error: Failed to get CID from the IPFS Cluster."
       rm "$tmpfile"
       exit 1
     fi
@@ -123,7 +123,7 @@ EOF
       '{records: [\$key]}' > \"\$tmpfile\"
     cid=\$(ipfs-cluster-ctl add -q \"\$tmpfile\")
     if [ -z \"\$cid\" ]; then
-      echo \"Error: Failed to fetch CID from the IPFS Cluster.\"
+      echo \"Error: Failed to fetch the CID from the IPFS Cluster.\"
       rm \"\$tmpfile\"
       exit 1
     fi
@@ -157,7 +157,7 @@ EOF
 
   sudo -u "${APP_USERNAME}" bash -c '
     tmpfile=$(mktemp)
-    echo "{\"misc\": []}" > "$tmpfile"
+    echo "{}" > "$tmpfile"
     cid=$(ipfs-cluster-ctl add -q "$tmpfile")
     ipns_output=$(ipfs name publish  --key="misc" --lifetime=17520h /ipfs/"$cid")
     ipns_key=$(echo "$ipns_output" | awk "{print \$3}" | cut -d":" -f1)

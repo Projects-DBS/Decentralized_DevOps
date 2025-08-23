@@ -1,120 +1,221 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>CI Trigger - DCICD</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
+    <meta charset="UTF-8">
+    <title>CI Trigger - DCICD</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-
 <body class="bg-light">
-<div class="container py-5">
-  <div class="bg-white rounded shadow p-4 mx-auto" style="max-width:410px;">
-    <h2 class="mb-4 text-center">CI Trigger</h2>
-    <form id="ciForm" autocomplete="off">
-      <div class="mb-3">
-        <label class="form-label">Project</label>
-        <select id="project" class="form-select" required>
-          <option value="">Select Project</option>
-        </select>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Tag</label>
-        <select id="tag" class="form-select" required>
-          <option value="">Select Tag</option>
-        </select>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Version</label>
-        <select id="version" class="form-select" required>
-          <option value="">Select Version</option>
-        </select>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Project Zip Password</label>
-        <input type="password" id="pzip_password" class="form-control" required>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Build Zip Password</label>
-        <input type="password" id="zip_password" class="form-control mb-2" required placeholder="Build zip password">
-        <input type="password" id="zip_password2" class="form-control" required placeholder="Confirm build zip password">
-        <div class="form-text">
-          Passwords must be at least 8 characters and include uppercase, lowercase, a number, and a special character.
+    <div class="container py-5">
+        <div class="bg-white rounded shadow p-4 mx-auto" style="max-width:410px;">
+            <h2 class="mb-4 text-center">CI Trigger</h2>
+            
+            <form id="buildForm" autocomplete="off">
+                <div class="mb-3">
+                    <label class="form-label">Project</label>
+                    <select id="projectSelect" class="form-select" required>
+                        <option value="">Select Project</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Tag</label>
+                    <select id="tagSelect" class="form-select" required>
+                        <option value="">Select Tag</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Version</label>
+                    <select id="versionSelect" class="form-select" required>
+                        <option value="">Select Version</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Project Zip Password</label>
+                    <input type="password" id="projectPass" class="form-control" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Build Zip Password</label>
+                    <input type="password" id="buildPass1" class="form-control mb-2" required placeholder="Build zip password">
+                    <input type="password" id="buildPass2" class="form-control" required placeholder="Confirm build zip password">
+                    <div class="form-text">
+                        Passwords must be at least 8 characters and include uppercase, lowercase, a number, and a special character.
+                    </div>
+                </div>
+                
+                <div id="statusMessage" class="text-center small mb-2"></div>
+                <button type="submit" class="btn btn-primary w-100">Trigger CI</button>
+            </form>
         </div>
-      </div>
-      <div id="msg" class="text-center small mb-2"></div>
-      <button type="submit" class="btn btn-primary w-100">Trigger CI</button>
-    </form>
-  </div>
-</div>
-<script>
-let projects = [];
-fetch('/project_info', {method:'POST'}).then(r=>r.json()).then(data=>{
-  projects = Array.isArray(data)?data:(data.projects||[]);
-  let projSel = document.getElementById('project');
-  let names = [...new Set(projects.map(p=>p.project_name))];
-  projSel.innerHTML = '<option value="">Select Project</option>';
-  names.forEach(n=>projSel.innerHTML += `<option>${n}</option>`);
-});
-
-document.getElementById('project').onchange = function() {
-  let pname = this.value;
-  let tagSel = document.getElementById('tag');
-  let versionSel = document.getElementById('version');
-  tagSel.innerHTML = '<option value="">Select a Tag</option>';
-  versionSel.innerHTML = '<option value="">Select a Version</option>';
-  if(!pname) return;
-  let tags = [...new Set(projects.filter(p=>p.project_name===pname).map(p=>p.tag))];
-  tags.forEach(t=>tagSel.innerHTML += `<option>${t}</option>`);
-};
-document.getElementById('tag').onchange = function() {
-  let pname = document.getElementById('project').value;
-  let t = this.value;
-  let versionSel = document.getElementById('version');
-  versionSel.innerHTML = '<option value="">Select a Version</option>';
-  if(!pname||!t) return;
-  let vers = [...new Set(projects.filter(p=>p.project_name===pname&&p.tag===t).map(p=>p.version))];
-  vers.forEach(v=>versionSel.innerHTML += `<option>${v}</option>`);
-};
-
-document.getElementById('ciForm').onsubmit = function(e) {
-  e.preventDefault();
-  let project = document.getElementById('project').value;
-  let tag = document.getElementById('tag').value;
-  let version = document.getElementById('version').value;
-  let pzip = document.getElementById('pzip_password').value;
-  let bzip = document.getElementById('zip_password').value;
-  let bzip2 = document.getElementById('zip_password2').value;
-  let msg = document.getElementById('msg');
-  let strong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
-  msg.textContent = "";
-  msg.className = "text-center small mb-2";
-  if(!project||!tag||!version||!pzip||!bzip||!bzip2) { msg.textContent="All fields are required!"; msg.classList.add("text-danger"); return;}
-  if(bzip!==bzip2) { msg.textContent="Build Project passwords do not match."; msg.classList.add("text-danger"); return;}
-  if(pzip===bzip) { msg.textContent="Project and Build password should be different."; msg.classList.add("text-danger"); return;}
-  if(!strong.test(pzip)) { msg.textContent="Project password was not strong enough."; msg.classList.add("text-danger"); return;}
-  if(!strong.test(bzip)) { msg.textContent="Build password was not strong enough."; msg.classList.add("text-danger"); return;}
-  let selected = projects.find(p=>p.project_name===project&&p.tag===tag&&String(p.version)===String(version));
-  if(!selected) { msg.textContent="Invalid selection."; msg.classList.add("text-danger"); return;}
-  msg.textContent = "Triggering CI Pipeline......";
-  msg.classList.remove("text-danger");
-  fetch('/trigger-build-ci',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      cid:selected.cid,
-      tag:selected.tag,
-      zip_password:pzip,
-      build_zip_password:bzip,
-      project_name:project
-    })
-  }).then(r=>r.json()).then(data=>{
-    if(data.success){ msg.textContent="Build generated successfully."; msg.classList.add("text-success"); }
-    else{ msg.textContent=data.message||"Trigger failed."; msg.classList.add("text-danger"); }
-  }).catch(()=>{ msg.textContent="Network or server error."; msg.classList.add("text-danger"); });
-};
-</script>
+    </div>
+    <script>
+        var allProjects = [];
+        
+        fetch('/project_info', { method: 'POST' })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(result) {
+                allProjects = Array.isArray(result) ? result : (result.projects || []);
+                var dropdown = document.getElementById('projectSelect');
+                var projectNames = [];
+                
+                for (var i = 0; i < allProjects.length; i++) {
+                    if (projectNames.indexOf(allProjects[i].project_name) === -1) {
+                        projectNames.push(allProjects[i].project_name);
+                    }
+                }
+                
+                dropdown.innerHTML = '<option value="">Select Project</option>';
+                for (var j = 0; j < projectNames.length; j++) {
+                    dropdown.innerHTML += '<option>' + projectNames[j] + '</option>';
+                }
+            });
+        
+        document.getElementById('projectSelect').addEventListener('change', function() {
+            var selectedProject = this.value;
+            var tagDropdown = document.getElementById('tagSelect');
+            var versionDropdown = document.getElementById('versionSelect');
+            
+            tagDropdown.innerHTML = '<option value="">Select a Tag</option>';
+            versionDropdown.innerHTML = '<option value="">Select a Version</option>';
+            
+            if (!selectedProject) return;
+            
+            var availableTags = [];
+            for (var i = 0; i < allProjects.length; i++) {
+                if (allProjects[i].project_name === selectedProject) {
+                    if (availableTags.indexOf(allProjects[i].tag) === -1) {
+                        availableTags.push(allProjects[i].tag);
+                    }
+                }
+            }
+            
+            for (var j = 0; j < availableTags.length; j++) {
+                tagDropdown.innerHTML += '<option>' + availableTags[j] + '</option>';
+            }
+        });
+        
+        document.getElementById('tagSelect').addEventListener('change', function() {
+            var selectedProject = document.getElementById('projectSelect').value;
+            var selectedTag = this.value;
+            var versionDropdown = document.getElementById('versionSelect');
+            
+            versionDropdown.innerHTML = '<option value="">Select a Version</option>';
+            
+            if (!selectedProject || !selectedTag) return;
+            
+            var availableVersions = [];
+            for (var i = 0; i < allProjects.length; i++) {
+                if (allProjects[i].project_name === selectedProject && allProjects[i].tag === selectedTag) {
+                    if (availableVersions.indexOf(allProjects[i].version) === -1) {
+                        availableVersions.push(allProjects[i].version);
+                    }
+                }
+            }
+            
+            for (var j = 0; j < availableVersions.length; j++) {
+                versionDropdown.innerHTML += '<option>' + availableVersions[j] + '</option>';
+            }
+        });
+        
+        document.getElementById('buildForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            var selectedProject = document.getElementById('projectSelect').value;
+            var selectedTag = document.getElementById('tagSelect').value;
+            var selectedVersion = document.getElementById('versionSelect').value;
+            var projectPassword = document.getElementById('projectPass').value;
+            var buildPassword1 = document.getElementById('buildPass1').value;
+            var buildPassword2 = document.getElementById('buildPass2').value;
+            var messageBox = document.getElementById('statusMessage');
+            
+            var passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+            
+            messageBox.textContent = "";
+            messageBox.className = "text-center small mb-2";
+            
+            if (!selectedProject || !selectedTag || !selectedVersion || !projectPassword || !buildPassword1 || !buildPassword2) {
+                messageBox.textContent = "All fields are required!";
+                messageBox.classList.add("text-danger");
+                return;
+            }
+            
+            if (buildPassword1 !== buildPassword2) {
+                messageBox.textContent = "Build Project passwords do not match.";
+                messageBox.classList.add("text-danger");
+                return;
+            }
+            
+            if (projectPassword === buildPassword1) {
+                messageBox.textContent = "Project and Build password should be different.";
+                messageBox.classList.add("text-danger");
+                return;
+            }
+            
+            if (!passwordPattern.test(projectPassword)) {
+                messageBox.textContent = "Project password was not strong enough.";
+                messageBox.classList.add("text-danger");
+                return;
+            }
+            
+            if (!passwordPattern.test(buildPassword1)) {
+                messageBox.textContent = "Build password was not strong enough.";
+                messageBox.classList.add("text-danger");
+                return;
+            }
+            
+            var matchingProject = null;
+            for (var i = 0; i < allProjects.length; i++) {
+                if (allProjects[i].project_name === selectedProject && 
+                    allProjects[i].tag === selectedTag && 
+                    String(allProjects[i].version) === String(selectedVersion)) {
+                    matchingProject = allProjects[i];
+                    break;
+                }
+            }
+            
+            if (!matchingProject) {
+                messageBox.textContent = "Invalid selection.";
+                messageBox.classList.add("text-danger");
+                return;
+            }
+            
+            messageBox.textContent = "Triggering CI Pipeline......";
+            messageBox.classList.remove("text-danger");
+            
+            fetch('/trigger-build-ci', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cid: matchingProject.cid,
+                    tag: matchingProject.tag,
+                    zip_password: projectPassword,
+                    build_zip_password: buildPassword1,
+                    project_name: selectedProject
+                })
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(result) {
+                if (result.success) {
+                    messageBox.textContent = "Build generated successfully.";
+                    messageBox.classList.add("text-success");
+                } else {
+                    messageBox.textContent = result.message || "Trigger failed.";
+                    messageBox.classList.add("text-danger");
+                }
+            })
+            .catch(function() {
+                messageBox.textContent = "Network or server error.";
+                messageBox.classList.add("text-danger");
+            });
+        });
+    </script>
 </body>
 </html>
