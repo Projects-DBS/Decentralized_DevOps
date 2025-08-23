@@ -1,3 +1,9 @@
+# IPFS Commands, Configurations taken from  the IPFS Documentation
+# https://docs.ipfs.tech/ (Retrieved: 02 July 2025)
+
+# Flask Configuration from Documentation 
+# https://flask.palletsprojects.com (Retrieved: 22 July 2025)
+
 from datetime import datetime, timedelta, timezone
 import os
 import re
