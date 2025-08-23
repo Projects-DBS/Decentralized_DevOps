@@ -1,3 +1,7 @@
+# IPFS Commands, Configurations taken from  the IPFS Documentation
+# https://docs.ipfs.tech/ (Retrieved: 02 July 2025)
+
+
 #!/bin/bash
 
 set -e
